@@ -3,4 +3,7 @@ node_modules/
 /node_modules
 /storage/logs/combined.log
 /storage/logs/error.log
+/storage/admin
+/storage/itemImage
+
 
