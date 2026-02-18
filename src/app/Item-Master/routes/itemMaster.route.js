@@ -12,7 +12,7 @@ itemMasterRouter
   .post(
     authenticate(),
     authorize("item_master", "create"),
-    upload.fields("itemImage"),
+    upload.array("itemImages", 10),
     itemMasterController.create,
   )
 
@@ -24,14 +24,10 @@ itemMasterRouter
 
 itemMasterRouter
   .route("/:id")
-  .get(
-    authenticate(),
-    authorize("item_master", "view"),
-    itemMasterController.getById,
-  )
   .put(
     authenticate(),
     authorize("item_master", "edit"),
+    upload.array("itemImages", 10),
     itemMasterController.update,
   )
   .delete(
@@ -39,3 +35,10 @@ itemMasterRouter
     authorize("item_master", "delete"),
     itemMasterController.delete,
   );
+
+itemMasterRouter.delete(
+  "/:id/images",
+  authenticate(),
+  authorize("item_master", "delete"),
+  itemMasterController.deleteImages,
+);

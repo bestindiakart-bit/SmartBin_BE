@@ -57,6 +57,7 @@ const options = {
     "./src/app/CustomerMaster/docs/*.js",
     "./src/app/Project-Master/docs/*.js",
     "./src/app/Item-Master/docs/*.js",
+    "./src/app/Warehouse/docs/*.js",
   ],
 };
 

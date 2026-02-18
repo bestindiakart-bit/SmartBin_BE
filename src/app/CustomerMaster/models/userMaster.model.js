@@ -69,6 +69,11 @@ const userSchema = new mongoose.Schema(
       type: String,
     },
 
+    isFirstLogin: {
+      type: Boolean,
+      default: true,
+    },
+
     status: {
       type: Number,
       enum: Object.values(STATUS),
@@ -84,6 +89,27 @@ const userSchema = new mongoose.Schema(
     updatedBy: {
       type: String,
       trim: true,
+    },
+
+    otp: {
+      type: String,
+    },
+
+    otpExpiry: {
+      type: Date,
+    },
+
+    resetOtp: {
+      type: String,
+    },
+
+    resetOtpExpiry: {
+      type: Date,
+    },
+
+    resetPassword: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true },

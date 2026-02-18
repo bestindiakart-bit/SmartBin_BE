@@ -34,4 +34,18 @@ userMasterRouter
 
 userMasterRouter.route("/login").post(userMasterController.login);
 
+userMasterRouter.post("/verify-otp", userMasterController.verifyOtp);
+
+userMasterRouter.get("/me", authenticate(), userMasterController.getProfile);
+
+userMasterRouter.post("/resend-otp", userMasterController.resendOtp);
+
+userMasterRouter.post(
+  "/change-password",
+  authenticate(),
+  userMasterController.changePassword,
+);
+
+userMasterRouter.post("/forgot-password", userMasterController.forgotPassword);
+
 export default userMasterRouter;

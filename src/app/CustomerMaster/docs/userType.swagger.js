@@ -48,6 +48,7 @@
  *                         - forecast_viewer
  *                         - smart_bin_dashboard
  *                         - overall_report
+ *                         - warehouse_creation
  *                     create:
  *                       type: boolean
  *                     view:

@@ -5,6 +5,7 @@ export const MODULES = [
   "project_master",
   "item_master",
   "user_type_permission_master",
+  "warehouse_creation",
   "warehouse_order_details",
   "bin_configuration",
   "bill_of_materials",

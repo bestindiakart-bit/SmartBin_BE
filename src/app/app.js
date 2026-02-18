@@ -20,6 +20,7 @@ import userMasterRouter from "./CustomerMaster/routes/userMaster.route.js";
 import { projectMasterRouter } from "./Project-Master/routes/projectMaster.route.js";
 import { itemCategoryRouter } from "./Item-Master/routes/itemCategory.routes.js";
 import { itemMasterRouter } from "./Item-Master/routes/itemMaster.route.js";
+import { wareHouseRouter } from "./Warehouse/routes/warehouse.route.js";
 
 const { urlencoded, json } = bodyParser;
 
@@ -45,10 +46,11 @@ export function init(app) {
 
   app.use(`${BASE_URL}/customer-master`, customerMasterRouter);
   app.use(`${BASE_URL}/user-type`, userTypeRouter);
-  app.use(`${BASE_URL}/user-master`, userMasterRouter);
+  app.use(`${BASE_URL}/User`, userMasterRouter);
   app.use(`${BASE_URL}/project`, projectMasterRouter);
   app.use(`${BASE_URL}/item-category`, itemCategoryRouter);
   app.use(`${BASE_URL}/item-master`, itemMasterRouter);
+  app.use(`${BASE_URL}/warehouse`, wareHouseRouter);
 
   // Static files
   app.use("/storage", express.static(path.join(__dirname, "storage")));

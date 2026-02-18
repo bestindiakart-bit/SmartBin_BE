@@ -2,9 +2,9 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import argon2 from "argon2";
 import fs from "fs";
-import { Customer } from "../../src/master/model/customerMaster.model.js";
-import { User } from "../../src/master/model/userMaster.model.js";
-import { UserType } from "../../src/master/model/userType.js";
+import { Customer } from "../../src/app/CustomerMaster/models/customerMaster.model.js";
+import { User } from "../../src/app/CustomerMaster/models/userMaster.model.js";
+import { UserType } from "../../src/app/CustomerMaster/models/userType.js";
 import { STATUS } from "../../src/constants/status.js";
 import { MODULES } from "../../src/constants/modules.js";
 
@@ -44,7 +44,7 @@ const seed = async () => {
     -------------------------------- */
 
     let userType = await UserType.findOne({
-      userTypeName: seedData.userType.userTypeName,
+      userTypeName: seedData.UserType.userTypeName,
     });
 
     if (!userType) {
