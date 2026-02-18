@@ -49,11 +49,6 @@ const itemMasterSchema = new mongoose.Schema(
       type: Number, // in minutes or hours
     },
 
-    productCategory: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "ProductCategory",
-    },
-
     itemCategory: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ItemCategory",
@@ -92,8 +87,8 @@ const itemMasterSchema = new mongoose.Schema(
       default: false,
     },
 
-    itemImage: {
-      type: String,
+    itemImages: {
+      type: [String],
       trim: true,
     },
 

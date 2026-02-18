@@ -2,14 +2,35 @@ import mongoose from "mongoose";
 import { StatusCodes } from "http-status-codes";
 import { ItemMaster } from "../models/itemMaster.model.js";
 import { STATUS } from "../../../constants/status.js";
+import { logActivity } from "../../../utils/activity.util.js";
+import path from "path";
+import fs from "fs";
 
 export class ItemMasterService {
   async create(data, loggedInUser) {
-    console.log(data);
     try {
-      const { itemName, productCategory, itemCategory, price } = data;
+      const {
+        itemName,
+        itemCategory,
+        partNumber,
+        itemDescription,
+        weightPerUnit,
+        costPerUnit,
+        remarks,
+        manufacturingTime,
+        itemSBQ,
+        price,
+        itemHSNCode,
+        warehouseStock,
+        warehouseSafetyStock,
+        warehouseStockUrl,
+        isLocal,
+        status,
+        itemImages,
+      } = data;
 
-      if (!itemName) {
+      // 1️⃣ Required Validation
+      if (!itemName?.trim()) {
         return {
           success: false,
           data: { message: "Item name required" },
@@ -17,32 +38,90 @@ export class ItemMasterService {
         };
       }
 
-      // Auto generate itemId (simple)
-      const lastItem = await ItemMaster.findOne()
-        .sort({ createdAt: -1 })
-        .select("itemId")
-        .lean();
+      // 2️⃣ Validate itemCategory ObjectId
+      if (itemCategory && !mongoose.Types.ObjectId.isValid(itemCategory)) {
+        return {
+          success: false,
+          data: { message: "Invalid item category ID" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      // 3️⃣ Unique Check (customer + itemName)
+      const exists = await ItemMaster.exists({
+        customerId: loggedInUser.customerId,
+        itemName: itemName.trim(),
+      });
+
+      if (exists) {
+        return {
+          success: false,
+          data: { message: "Item already exists" },
+          statusCode: StatusCodes.CONFLICT,
+        };
+      }
+
+      // 4️⃣ Generate Item ID
+      const lastItem = await ItemMaster.findOne(
+        {},
+        { itemId: 1 },
+        { sort: { createdAt: -1 } },
+      ).lean();
 
       let nextNumber = 1;
 
-      if (lastItem && lastItem.itemId) {
-        const lastNum = parseInt(lastItem.itemId.split("-")[1]);
-        nextNumber = lastNum + 1;
+      if (lastItem?.itemId) {
+        const lastNum = parseInt(lastItem.itemId.split("-")[1], 10);
+        nextNumber = isNaN(lastNum) ? 1 : lastNum + 1;
       }
 
       const itemId = `SBITEM-${String(nextNumber).padStart(3, "0")}`;
 
+      // 5️⃣ Create Item
       const item = await ItemMaster.create({
-        ...data,
         customerId: loggedInUser.customerId,
         itemId,
+        itemName: itemName.trim(),
+        itemCategory,
+        partNumber: partNumber?.trim(),
+        itemDescription: itemDescription?.trim(),
+        weightPerUnit: weightPerUnit ? Number(weightPerUnit) : undefined,
+        costPerUnit: costPerUnit ? Number(costPerUnit) : undefined,
+        remarks: remarks?.trim(),
+        manufacturingTime: manufacturingTime
+          ? Number(manufacturingTime)
+          : undefined,
+        itemSBQ: itemSBQ ? Number(itemSBQ) : undefined,
+        price: price ? Number(price) : undefined,
+        itemHSNCode: itemHSNCode?.trim(),
+        warehouseStock: warehouseStock ? Number(warehouseStock) : 0,
+        warehouseSafetyStock: warehouseSafetyStock
+          ? Number(warehouseSafetyStock)
+          : 0,
+        warehouseStockUrl: warehouseStockUrl?.trim(),
+        isLocal: isLocal === true || isLocal === "true",
+        status: status ?? STATUS.ACTIVE,
+        itemImages: Array.isArray(itemImages) ? itemImages : [],
         createdBy: loggedInUser.userName,
+      });
+
+      // 6️⃣ Log Activity
+      await logActivity({
+        userId: loggedInUser._id,
+        entityType: "ItemMaster",
+        entityId: item._id,
+        actionType: "Created",
+        description: `${loggedInUser.userName} created item ${item.itemId}`,
       });
 
       return {
         success: true,
         statusCode: StatusCodes.CREATED,
-        data: item,
+        data: {
+          _id: item._id,
+          itemId: item.itemId,
+          itemName: item.itemName,
+        },
       };
     } catch (err) {
       return {
@@ -55,17 +134,53 @@ export class ItemMasterService {
 
   async getAll(query, loggedInUser) {
     try {
-      const items = await ItemMaster.find({
+      const { page = 1, limit = 10, search, itemCategory, status } = query;
+
+      const filter = {
         customerId: loggedInUser.customerId,
-        status: STATUS.ACTIVE,
-      })
+      };
+
+      // Status filter
+      if (status !== undefined) {
+        filter.status = Number(status);
+      } else {
+        filter.status = STATUS.ACTIVE;
+      }
+
+      // Search filter
+      if (search) {
+        filter.$or = [
+          { itemName: { $regex: search, $options: "i" } },
+          { partNumber: { $regex: search, $options: "i" } },
+        ];
+      }
+
+      // Item Category filter
+      if (itemCategory && mongoose.Types.ObjectId.isValid(itemCategory)) {
+        filter.itemCategory = itemCategory;
+      }
+
+      const pageNumber = Number(page);
+      const pageSize = Number(limit);
+      const skip = (pageNumber - 1) * pageSize;
+
+      const totalRecords = await ItemMaster.countDocuments(filter);
+
+      const items = await ItemMaster.find(filter)
         .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(pageSize)
         .lean();
 
       return {
         success: true,
         statusCode: StatusCodes.OK,
-        data: items,
+        data: {
+          totalRecords,
+          totalPages: Math.ceil(totalRecords / pageSize),
+          currentPage: pageNumber,
+          items,
+        },
       };
     } catch (err) {
       return {
@@ -115,16 +230,23 @@ export class ItemMasterService {
 
   async update(id, data, loggedInUser) {
     try {
-      const updated = await ItemMaster.findOneAndUpdate(
-        {
-          _id: id,
-          customerId: loggedInUser.customerId,
-        },
-        { ...data, updatedBy: loggedInUser.userName },
-        { new: true },
-      ).lean();
+      // 1️⃣ Validate ObjectId
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return {
+          success: false,
+          data: { message: "Invalid item ID" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
 
-      if (!updated) {
+      // 2️⃣ Find Existing Item (Customer Isolation)
+      const existingItem = await ItemMaster.findOne({
+        _id: id,
+        customerId: loggedInUser.customerId,
+        status: { $ne: STATUS.INACTIVE },
+      });
+
+      if (!existingItem) {
         return {
           success: false,
           data: { message: "Item not found" },
@@ -132,10 +254,84 @@ export class ItemMasterService {
         };
       }
 
+      // 3️⃣ Validate itemCategory if provided
+      if (
+        data.itemCategory &&
+        !mongoose.Types.ObjectId.isValid(data.itemCategory)
+      ) {
+        return {
+          success: false,
+          data: { message: "Invalid item category ID" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      // 4️⃣ Prepare Update Object
+      const updateData = {
+        updatedBy: loggedInUser.userName,
+      };
+
+      const numberFields = [
+        "weightPerUnit",
+        "costPerUnit",
+        "manufacturingTime",
+        "itemSBQ",
+        "price",
+        "warehouseStock",
+        "warehouseSafetyStock",
+      ];
+
+      const allowedFields = [
+        "itemName",
+        "itemCategory", // ✅ keep this
+        "partNumber",
+        "itemDescription",
+        "remarks",
+        "itemHSNCode",
+        "warehouseStockUrl",
+        "status",
+      ];
+
+      // 5️⃣ Handle Fields
+      for (let key in data) {
+        if (data[key] === undefined) continue;
+
+        if (numberFields.includes(key)) {
+          updateData[key] = Number(data[key]);
+        } else if (key === "isLocal") {
+          updateData[key] = data[key] === true || data[key] === "true";
+        } else if (allowedFields.includes(key)) {
+          updateData[key] =
+            typeof data[key] === "string" ? data[key].trim() : data[key];
+        }
+      }
+
+      // 6️⃣ Handle Images (Add Without Removing Old)
+      if (Array.isArray(data.itemImages) && data.itemImages.length > 0) {
+        updateData.itemImages = [
+          ...new Set([...(existingItem.itemImages || []), ...data.itemImages]),
+        ];
+      }
+
+      // 7️⃣ Update Document
+      const updatedItem = await ItemMaster.findByIdAndUpdate(id, updateData, {
+        new: true,
+      }).lean();
+
+      // 8️⃣ Log Activity
+      await logActivity({
+        userId: loggedInUser._id,
+        entityType: "ItemMaster",
+        entityId: updatedItem._id,
+        actionType: "Updated",
+        description: `${loggedInUser.userName} updated item ${updatedItem.itemId}`,
+      });
+
+      // 9️⃣ Return Response
       return {
         success: true,
         statusCode: StatusCodes.OK,
-        data: updated,
+        data: updatedItem,
       };
     } catch (err) {
       return {
@@ -169,6 +365,100 @@ export class ItemMasterService {
         success: true,
         statusCode: StatusCodes.OK,
         data: { message: "Item deleted successfully" },
+      };
+    } catch (err) {
+      return {
+        success: false,
+        data: { message: err.message },
+        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+      };
+    }
+  }
+
+  async deleteImages(id, imagesToDelete, loggedInUser) {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return {
+          success: false,
+          data: { message: "Invalid item ID" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      if (!Array.isArray(imagesToDelete) || imagesToDelete.length === 0) {
+        return {
+          success: false,
+          data: { message: "Images array required" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      const item = await ItemMaster.findOne({
+        _id: id,
+        customerId: loggedInUser.customerId,
+        status: { $ne: STATUS.INACTIVE },
+      });
+
+      if (!item) {
+        return {
+          success: false,
+          data: { message: "Item not found" },
+          statusCode: StatusCodes.NOT_FOUND,
+        };
+      }
+
+      const existingImages = item.itemImages || [];
+
+      const imagesToActuallyDelete = existingImages.filter((img) =>
+        imagesToDelete.includes(img),
+      );
+
+      if (imagesToActuallyDelete.length === 0) {
+        return {
+          success: false,
+          data: { message: "No matching images found to delete" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      //  Delete from local storage
+      for (let imageUrl of imagesToActuallyDelete) {
+        try {
+          const filename = imageUrl.split("/").pop();
+          const filePath = path.join(__dirname, "../../uploads", filename);
+
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        } catch (err) {
+          console.error("File delete error:", err.message);
+        }
+      }
+
+      // Remove from DB
+      item.itemImages = existingImages.filter(
+        (img) => !imagesToDelete.includes(img),
+      );
+
+      item.updatedBy = loggedInUser.userName;
+      await item.save();
+
+      await logActivity({
+        userId: loggedInUser._id,
+        entityType: "ItemMaster",
+        entityId: item._id,
+        actionType: "Image Deleted",
+        description: `${loggedInUser.userName} deleted ${imagesToActuallyDelete.length} image(s) from item ${item.itemId}`,
+      });
+
+      return {
+        success: true,
+        statusCode: StatusCodes.OK,
+        data: {
+          _id: item._id,
+          itemId: item.itemId,
+          itemImages: item.itemImages,
+        },
       };
     } catch (err) {
       return {

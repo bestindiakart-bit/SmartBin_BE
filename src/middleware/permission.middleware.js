@@ -3,8 +3,6 @@ import { UserType } from "../app/CustomerMaster/models/userType.js";
 import { STATUS } from "../constants/status.js";
 
 export const authorize = (moduleName, action) => {
-  console.log("Authorize middleware file loaded");
-
   return async (req, res, next) => {
     const userTypeId = req.decodedToken.data.userTypeId._id;
 

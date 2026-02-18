@@ -54,4 +54,53 @@ export class UserMasterController extends ResponseHandler {
       return next(error);
     }
   };
+
+  verifyOtp = async (req, res, next) => {
+    try {
+      const data = await this.service.verifyOtp(req.body);
+      return res.status(data.statusCode).json(data);
+    } catch (err) {
+      return next(err);
+    }
+  };
+
+  getProfile = async (req, res, next) => {
+    try {
+      // id comes from JWT middleware
+      const userId = req.user._id;
+
+      const data = await this.service.getProfile(userId);
+
+      return res.status(data.statusCode).json(data);
+    } catch (error) {
+      return next(error);
+    }
+  };
+
+  resendOtp = async (req, res, next) => {
+    try {
+      const data = await this.service.resendOtp(req.body);
+      return res.status(data.statusCode).json(data);
+    } catch (err) {
+      return next(err);
+    }
+  };
+
+  changePassword = async (req, res, next) => {
+    try {
+      const data = await this.service.changePassword(req.body, req.user);
+      return res.status(data.statusCode).json(data);
+    } catch (err) {
+      return next(err);
+    }
+  };
+
+  forgotPassword = async (req, res, next) => {
+    try {
+      const data = await this.service.forgotPassword(req.body);
+      return res.status(data.statusCode).json(data);
+    } catch (err) {
+      return next(err);
+    }
+  };
 }

@@ -7,6 +7,7 @@ import { Customer } from "../models/customerMaster.model.js";
 import { UserType } from "../models/userType.js";
 import { generateUserId } from "../../../utils/generateUserId.util.js";
 import { getJwtToken } from "../../../utils/token.utils.js";
+import { sendMail } from "../../../utils/mailer.js";
 
 export class UserMasterService {
   async create(data, loggedInUser) {
@@ -290,7 +291,6 @@ export class UserMasterService {
 
       const email = loginEmail.toLowerCase().trim();
 
-      // 1. Find User First
       const user = await User.findOne({
         loginEmail: email,
         status: STATUS.ACTIVE,
@@ -304,7 +304,6 @@ export class UserMasterService {
         };
       }
 
-      // 2. Verify Password
       const isValid = await argon2.verify(user.loginPassword, loginPassword);
 
       if (!isValid) {
@@ -315,7 +314,6 @@ export class UserMasterService {
         };
       }
 
-      // 3. Check Customer From User Data
       const customer = await Customer.findOne({
         _id: user.customerId,
         companyName: user.companyName,
@@ -330,7 +328,152 @@ export class UserMasterService {
         };
       }
 
-      // 4. Generate Tokens
+      // ---------- CASE 1: FIRST LOGIN ----------
+      if (user.isFirstLogin === true) {
+        return {
+          success: true,
+          statusCode: StatusCodes.OK,
+          data: {
+            message: "Login successful. Navigate to change password page.",
+            isFirstLogin: true,
+          },
+        };
+      }
+
+      // ---------- CASE 2: NORMAL LOGIN → SEND OTP ----------
+
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      user.otp = await argon2.hash(otp);
+      user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+      await user.save();
+
+      await sendMail({
+        to: user.loginEmail,
+        subject: "Login OTP Verification",
+        html: `<p>Your login OTP is <b>${otp}</b>. Valid for 10 minutes.</p>`,
+      });
+
+      return {
+        success: true,
+        statusCode: StatusCodes.OK,
+        data: {
+          message: "OTP sent to registered email",
+        },
+      };
+    } catch (err) {
+      console.log(err.message);
+      return {
+        success: false,
+        data: { message: "Server error" },
+        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+      };
+    }
+  }
+
+  async verifyOtp(data) {
+    try {
+      const { loginEmail, otp } = data;
+
+      if (!loginEmail || !otp) {
+        return {
+          success: false,
+          data: { message: "Email and OTP required" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      const email = loginEmail.toLowerCase().trim();
+
+      const user = await User.findOne({
+        loginEmail: email,
+        status: STATUS.ACTIVE,
+      }).populate("userTypeId");
+
+      if (!user) {
+        return {
+          success: false,
+          data: { message: "User not found" },
+          statusCode: StatusCodes.NOT_FOUND,
+        };
+      }
+
+      // ---------- CASE 1: FIRST LOGIN OTP ----------
+      if (user.isFirstLogin === true) {
+        if (!user.otp || !user.otpExpiry) {
+          return {
+            success: false,
+            data: { message: "OTP not generated" },
+            statusCode: StatusCodes.BAD_REQUEST,
+          };
+        }
+
+        if (new Date() > user.otpExpiry) {
+          return {
+            success: false,
+            data: { message: "OTP expired" },
+            statusCode: StatusCodes.BAD_REQUEST,
+          };
+        }
+
+        const isValidOtp = await argon2.verify(user.otp, otp);
+
+        if (!isValidOtp) {
+          return {
+            success: false,
+            data: { message: "Invalid OTP" },
+            statusCode: StatusCodes.UNAUTHORIZED,
+          };
+        }
+
+        user.isFirstLogin = false;
+        user.otp = undefined;
+        user.otpExpiry = undefined;
+      }
+
+      // ---------- CASE 2: RESET PASSWORD OTP ----------
+      else if (user.resetPassword === true) {
+        if (!user.resetOtp || !user.resetOtpExpiry) {
+          return {
+            success: false,
+            data: { message: "Reset OTP not generated" },
+            statusCode: StatusCodes.BAD_REQUEST,
+          };
+        }
+
+        if (new Date() > user.resetOtpExpiry) {
+          return {
+            success: false,
+            data: { message: "OTP expired" },
+            statusCode: StatusCodes.BAD_REQUEST,
+          };
+        }
+
+        const isValidOtp = await argon2.verify(user.resetOtp, otp);
+
+        if (!isValidOtp) {
+          return {
+            success: false,
+            data: { message: "Invalid OTP" },
+            statusCode: StatusCodes.UNAUTHORIZED,
+          };
+        }
+
+        // Clear reset flags
+        user.resetPassword = false;
+        user.resetOtp = undefined;
+        user.resetOtpExpiry = undefined;
+      } else {
+        return {
+          success: false,
+          data: { message: "OTP verification not required" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      // -------- Generate Tokens --------
+
       const tokens = getJwtToken({
         _id: user._id,
         customerId: user.customerId,
@@ -341,18 +484,208 @@ export class UserMasterService {
 
       const hashedRefresh = await argon2.hash(tokens.refreshToken);
       user.refreshToken = hashedRefresh;
+
       await user.save();
 
       return {
         success: true,
+        statusCode: StatusCodes.OK,
         data: {
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
         },
-        statusCode: StatusCodes.OK,
       };
     } catch (err) {
-      console.log(err.message);
+      return {
+        success: false,
+        data: { message: "Server error" },
+        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+      };
+    }
+  }
+
+  async getProfile(userId) {
+    try {
+      const user = await User.findById(userId)
+        .select("-loginPassword -refreshToken")
+        .populate("userTypeId");
+
+      return {
+        success: true,
+        data: user,
+        statusCode: StatusCodes.OK,
+      };
+    } catch {
+      return {
+        success: false,
+        data: { message: "User not found" },
+        statusCode: StatusCodes.NOT_FOUND,
+      };
+    }
+  }
+
+  async resendOtp(data) {
+    try {
+      const { loginEmail } = data;
+
+      if (!loginEmail) {
+        return {
+          success: false,
+          data: { message: "Email required" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      const email = loginEmail.toLowerCase().trim();
+
+      const user = await User.findOne({
+        loginEmail: email,
+        status: STATUS.ACTIVE,
+      });
+
+      if (!user) {
+        return {
+          success: false,
+          data: { message: "User not found" },
+          statusCode: StatusCodes.NOT_FOUND,
+        };
+      }
+
+      if (!user.isFirstLogin) {
+        return {
+          success: false,
+          data: { message: "OTP not required for this user" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      // Generate new 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      user.otp = await argon2.hash(otp);
+      user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+      await user.save();
+
+      // Send Email
+      await sendMail({
+        to: user.loginEmail,
+        subject: "Your New OTP Code",
+        html: `<p>Your OTP is <b>${otp}</b>. It is valid for 10 minutes.</p>`,
+      });
+
+      return {
+        success: true,
+        statusCode: StatusCodes.OK,
+        data: {
+          message: "OTP resent successfully",
+        },
+      };
+    } catch (err) {
+      return {
+        success: false,
+        data: { message: "Server error" },
+        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+      };
+    }
+  }
+
+  async changePassword(data) {
+    try {
+      const { currentPassword, newPassword } = data;
+
+      if (!currentPassword || !newPassword) {
+        return {
+          success: false,
+          data: { message: "Current and new password required" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      const user = await User.findOne({ loginEmail: data.email });
+
+      if (!user) {
+        return {
+          success: false,
+          data: { message: "User not found" },
+          statusCode: StatusCodes.NOT_FOUND,
+        };
+      }
+
+      const isValid = await argon2.verify(user.loginPassword, currentPassword);
+
+      if (!isValid) {
+        return {
+          success: false,
+          data: { message: "Current password incorrect" },
+          statusCode: StatusCodes.UNAUTHORIZED,
+        };
+      }
+
+      user.loginPassword = await argon2.hash(newPassword);
+      await user.save();
+
+      return {
+        success: true,
+        statusCode: StatusCodes.OK,
+        data: { message: "Password changed successfully" },
+      };
+    } catch (err) {
+      return {
+        success: false,
+        data: { message: "Server error" },
+        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+      };
+    }
+  }
+
+  async forgotPassword(data) {
+    try {
+      const { loginEmail } = data;
+
+      if (!loginEmail) {
+        return {
+          success: false,
+          data: { message: "Email required" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      const email = loginEmail.toLowerCase().trim();
+
+      const user = await User.findOne({
+        loginEmail: email,
+        status: STATUS.ACTIVE,
+      });
+
+      if (!user) {
+        return {
+          success: false,
+          data: { message: "User not found" },
+          statusCode: StatusCodes.NOT_FOUND,
+        };
+      }
+
+      // Generate 6 digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      user.resetPassword = true; // Important flag
+      user.resetOtp = await argon2.hash(otp);
+      user.resetOtpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+      await user.save();
+
+      await sendMail({
+        to: user.loginEmail,
+        subject: "Password Reset OTP",
+        html: `<p>Your password reset OTP is <b>${otp}</b>. It is valid for 10 minutes.</p>`,
+      });
+
+      return {
+        success: true,
+        statusCode: StatusCodes.OK,
+        data: { message: "Reset OTP sent to email" },
+      };
+    } catch (err) {
       return {
         success: false,
         data: { message: "Server error" },

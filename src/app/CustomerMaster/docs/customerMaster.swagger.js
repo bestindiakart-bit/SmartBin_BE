@@ -61,66 +61,6 @@
 
 /**
  * @swagger
- * /customer-master/me:
- *   get:
- *     summary: Get logged-in customer master profile
- *     description: Returns profile details of the currently authenticated user.
- *     tags:
- *       - Customer Master
- *
- *     security:
- *       - userAuth: []
- *
- *     responses:
- *       200:
- *         description: Profile fetched successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     _id:
- *                       type: string
- *                       example: "698d661c9afdacfdad0a1bb0"
- *                     userName:
- *                       type: string
- *                       example: "Demo Admin"
- *                     loginEmail:
- *                       type: string
- *                       example: "smartbin@gmail.com"
- *                     companyName:
- *                       type: string
- *                       example: "SmartBin Demo Pvt Ltd"
- *                     url:
- *                       type: string
- *                       example: "smartbin-demo-pvt-ltd"
- *                     status:
- *                       type: number
- *                       example: 1
- *
- *       401:
- *         description: Unauthorized - Invalid or missing token
- *         content:
- *           application/json:
- *             example:
- *               success: false
- *               message: Unauthorized request
- *
- *       404:
- *         description: User not found
- *
- *       500:
- *         description: Server error
- */
-
-/**
- * @swagger
  * /customer-master:
  *   post:
  *     summary: Create a new customer with admin user
