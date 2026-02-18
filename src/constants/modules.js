@@ -1,0 +1,14 @@
+export const MODULES = [
+  "dashboard",
+  "customer_master",
+  "user_master",
+  "project_master",
+  "item_master",
+  "user_type_permission_master",
+  "warehouse_order_details",
+  "bin_configuration",
+  "bill_of_materials",
+  "forecast_viewer",
+  "smart_bin_dashboard",
+  "overall_report",
+];
