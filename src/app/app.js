@@ -21,6 +21,7 @@ import { projectMasterRouter } from "./Project-Master/routes/projectMaster.route
 import { itemCategoryRouter } from "./Item-Master/routes/itemCategory.routes.js";
 import { itemMasterRouter } from "./Item-Master/routes/itemMaster.route.js";
 import { wareHouseRouter } from "./Warehouse/routes/warehouse.route.js";
+import { binMasterRouter } from "./Bin/routes/binConfiguration.route.js";
 
 const { urlencoded, json } = bodyParser;
 
@@ -51,6 +52,7 @@ export function init(app) {
   app.use(`${BASE_URL}/item-category`, itemCategoryRouter);
   app.use(`${BASE_URL}/item-master`, itemMasterRouter);
   app.use(`${BASE_URL}/warehouse`, wareHouseRouter);
+  app.use(`${BASE_URL}/bin`, binMasterRouter);
 
   // Static files
   app.use("/storage", express.static(path.join(__dirname, "storage")));
