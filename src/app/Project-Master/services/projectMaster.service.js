@@ -7,7 +7,6 @@ import { logActivity } from "../../../utils/activity.util.js";
 
 export class ProjectMasterService {
   async create(data, loggedInUser) {
-    console.log(loggedInUser);
     try {
       const {
         projectName,
@@ -16,13 +15,36 @@ export class ProjectMasterService {
         startDate,
         endDate,
         projectDescription,
+        slug,
       } = data;
 
-      if (!projectName || !projectHead || !projectManager || !startDate) {
+      if (
+        !projectName ||
+        !projectHead ||
+        !projectManager ||
+        !startDate ||
+        !slug
+      ) {
         return {
           success: false,
           data: { message: "Required fields missing" },
           statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      const formattedSlug = slug.toLowerCase().trim();
+
+      // 🔥 Check slug existence
+      const existingSlug = await Project.findOne({
+        slug: formattedSlug,
+        customerId: loggedInUser.customerId,
+      }).lean();
+
+      if (existingSlug && existingSlug.status !== 2) {
+        return {
+          success: false,
+          data: { message: "Slug already exists" },
+          statusCode: StatusCodes.CONFLICT,
         };
       }
 
@@ -45,8 +67,6 @@ export class ProjectMasterService {
         };
       }
 
-      console.log(projectHead, projectManager);
-
       const users = await User.find({
         _id: { $in: [projectHead, projectManager] },
         customerId: loggedInUser.customerId,
@@ -54,8 +74,6 @@ export class ProjectMasterService {
       })
         .select("_id userName")
         .lean();
-
-      console.log(users);
 
       if (users.length !== 2) {
         return {
@@ -71,7 +89,7 @@ export class ProjectMasterService {
         (u) => u._id.toString() === projectManager,
       );
 
-      //  SIMPLE AUTO INCREMENT LOGIC
+      // 🔥 Auto Increment Logic
       const lastProject = await Project.findOne({
         customerId: loggedInUser.customerId,
       })
@@ -81,7 +99,7 @@ export class ProjectMasterService {
 
       let nextNumber = 1;
 
-      if (lastProject && lastProject.projectId) {
+      if (lastProject?.projectId) {
         const lastNumber = parseInt(lastProject.projectId.split("-")[1]);
         nextNumber = lastNumber + 1;
       }
@@ -92,6 +110,7 @@ export class ProjectMasterService {
       const project = await Project.create({
         customerId: loggedInUser.customerId,
         projectId,
+        slug: formattedSlug,
         projectName,
         projectHead: headUser.userName,
         projectManager: managerUser.userName,
@@ -115,6 +134,7 @@ export class ProjectMasterService {
         statusCode: StatusCodes.CREATED,
         data: {
           projectId: project.projectId,
+          slug: project.slug,
           projectName: project.projectName,
           projectHead: project.projectHead,
           projectManager: project.projectManager,
@@ -178,16 +198,50 @@ export class ProjectMasterService {
         };
       }
 
+      const existingProject = await Project.findOne({
+        _id: id,
+        customerId: loggedInUser.customerId,
+      }).lean();
+
+      if (!existingProject) {
+        return {
+          success: false,
+          data: { message: "Project not found" },
+          statusCode: StatusCodes.NOT_FOUND,
+        };
+      }
+
       const updateData = {
         updatedBy: loggedInUser.userName,
       };
 
+      // -------- 1. Slug Update Logic --------
+      if (data.slug !== undefined) {
+        const formattedSlug = data.slug.toLowerCase().trim();
+
+        const slugExists = await Project.findOne({
+          slug: formattedSlug,
+          customerId: loggedInUser.customerId,
+          _id: { $ne: id },
+        }).lean();
+
+        if (slugExists && slugExists.status !== 2) {
+          return {
+            success: false,
+            data: { message: "Slug already exists" },
+            statusCode: StatusCodes.CONFLICT,
+          };
+        }
+
+        updateData.slug = formattedSlug;
+      }
+
+      // -------- 2. Basic Allowed Fields --------
       const allowedFields = [
         "projectName",
-        "startDate",
-        "endDate",
         "projectDescription",
         "manualEntry",
+        "status",
       ];
 
       for (const key of allowedFields) {
@@ -196,11 +250,14 @@ export class ProjectMasterService {
         }
       }
 
-      // Date validation
+      // -------- 3. Date Validation --------
+      const newStartDate = data.startDate ?? existingProject.startDate;
+      const newEndDate = data.endDate ?? existingProject.endDate;
+
       if (
-        updateData.startDate &&
-        updateData.endDate &&
-        new Date(updateData.startDate) > new Date(updateData.endDate)
+        newStartDate &&
+        newEndDate &&
+        new Date(newStartDate) > new Date(newEndDate)
       ) {
         return {
           success: false,
@@ -209,8 +266,16 @@ export class ProjectMasterService {
         };
       }
 
-      // If projectHead is updated (ObjectId → convert to name)
-      if (data.projectHead) {
+      if (data.startDate !== undefined) {
+        updateData.startDate = data.startDate;
+      }
+
+      if (data.endDate !== undefined) {
+        updateData.endDate = data.endDate;
+      }
+
+      // -------- 4. Project Head Update --------
+      if (data.projectHead !== undefined) {
         if (!mongoose.Types.ObjectId.isValid(data.projectHead)) {
           return {
             success: false,
@@ -238,8 +303,8 @@ export class ProjectMasterService {
         updateData.projectHead = headUser.userName;
       }
 
-      // If projectManager is updated
-      if (data.projectManager) {
+      // -------- 5. Project Manager Update --------
+      if (data.projectManager !== undefined) {
         if (!mongoose.Types.ObjectId.isValid(data.projectManager)) {
           return {
             success: false,
@@ -267,23 +332,15 @@ export class ProjectMasterService {
         updateData.projectManager = managerUser.userName;
       }
 
+      // -------- 6. Update --------
       const updated = await Project.findOneAndUpdate(
         {
           _id: id,
           customerId: loggedInUser.customerId,
-          status: STATUS.ACTIVE,
         },
         updateData,
-        { new: true },
+        { new: true, runValidators: true },
       ).lean();
-
-      if (!updated) {
-        return {
-          success: false,
-          data: { message: "Project not found" },
-          statusCode: StatusCodes.NOT_FOUND,
-        };
-      }
 
       await logActivity({
         userId: loggedInUser._id,

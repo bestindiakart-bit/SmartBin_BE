@@ -97,6 +97,26 @@ export class UserMasterService {
         createdBy: loggedInUser.userName,
       });
 
+      try {
+        await sendMail({
+          to: email,
+          subject: "Your SmartBin Account Credentials",
+          html: `
+      <h3>Welcome to SmartBin</h3>
+      <p>Hello ${userName},</p>
+      <p>Your account has been created successfully.</p>
+      <p><b>Login Email:</b> ${email}</p>
+      <p><b>Password:</b> ${loginPassword}</p>
+      <p>Please login and change your password immediately.</p>
+      <br/>
+      <p>Regards,<br/>SmartBin Team</p>
+    `,
+        });
+      } catch (mailError) {
+        console.error("Email sending failed:", mailError.message);
+        // Do NOT block user creation if email fails
+      }
+
       return {
         success: true,
         statusCode: StatusCodes.CREATED,
@@ -328,38 +348,34 @@ export class UserMasterService {
         };
       }
 
-      // ---------- CASE 1: FIRST LOGIN ----------
-      if (user.isFirstLogin === true) {
-        return {
-          success: true,
-          statusCode: StatusCodes.OK,
-          data: {
-            message: "Login successful. Navigate to change password page.",
-            isFirstLogin: true,
-          },
-        };
-      }
-
-      // ---------- CASE 2: NORMAL LOGIN → SEND OTP ----------
-
+      // Always generate OTP after password validation
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
       user.otp = await argon2.hash(otp);
-      user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+      user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
       await user.save();
 
-      await sendMail({
-        to: user.loginEmail,
-        subject: "Login OTP Verification",
-        html: `<p>Your login OTP is <b>${otp}</b>. Valid for 10 minutes.</p>`,
-      });
+      try {
+        await sendMail({
+          to: user.loginEmail,
+          subject: "Login OTP Verification",
+          html: `
+          <p>Hello ${user.userName},</p>
+          <p>Your login OTP is <b>${otp}</b>.</p>
+          <p>This OTP is valid for 10 minutes.</p>
+        `,
+        });
+      } catch (mailError) {
+        console.error("Mail Error:", mailError.message);
+      }
 
       return {
         success: true,
         statusCode: StatusCodes.OK,
         data: {
           message: "OTP sent to registered email",
+          email: user.loginEmail,
         },
       };
     } catch (err) {
@@ -399,80 +415,35 @@ export class UserMasterService {
         };
       }
 
-      // ---------- CASE 1: FIRST LOGIN OTP ----------
-      if (user.isFirstLogin === true) {
-        if (!user.otp || !user.otpExpiry) {
-          return {
-            success: false,
-            data: { message: "OTP not generated" },
-            statusCode: StatusCodes.BAD_REQUEST,
-          };
-        }
-
-        if (new Date() > user.otpExpiry) {
-          return {
-            success: false,
-            data: { message: "OTP expired" },
-            statusCode: StatusCodes.BAD_REQUEST,
-          };
-        }
-
-        const isValidOtp = await argon2.verify(user.otp, otp);
-
-        if (!isValidOtp) {
-          return {
-            success: false,
-            data: { message: "Invalid OTP" },
-            statusCode: StatusCodes.UNAUTHORIZED,
-          };
-        }
-
-        user.isFirstLogin = false;
-        user.otp = undefined;
-        user.otpExpiry = undefined;
-      }
-
-      // ---------- CASE 2: RESET PASSWORD OTP ----------
-      else if (user.resetPassword === true) {
-        if (!user.resetOtp || !user.resetOtpExpiry) {
-          return {
-            success: false,
-            data: { message: "Reset OTP not generated" },
-            statusCode: StatusCodes.BAD_REQUEST,
-          };
-        }
-
-        if (new Date() > user.resetOtpExpiry) {
-          return {
-            success: false,
-            data: { message: "OTP expired" },
-            statusCode: StatusCodes.BAD_REQUEST,
-          };
-        }
-
-        const isValidOtp = await argon2.verify(user.resetOtp, otp);
-
-        if (!isValidOtp) {
-          return {
-            success: false,
-            data: { message: "Invalid OTP" },
-            statusCode: StatusCodes.UNAUTHORIZED,
-          };
-        }
-
-        // Clear reset flags
-        user.resetPassword = false;
-        user.resetOtp = undefined;
-        user.resetOtpExpiry = undefined;
-      } else {
+      if (!user.otp || !user.otpExpiry) {
         return {
           success: false,
-          data: { message: "OTP verification not required" },
+          data: { message: "OTP not generated" },
           statusCode: StatusCodes.BAD_REQUEST,
         };
       }
 
-      // -------- Generate Tokens --------
+      if (new Date() > user.otpExpiry) {
+        return {
+          success: false,
+          data: { message: "OTP expired" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      const isValidOtp = await argon2.verify(user.otp, otp);
+
+      if (!isValidOtp) {
+        return {
+          success: false,
+          data: { message: "Invalid OTP" },
+          statusCode: StatusCodes.UNAUTHORIZED,
+        };
+      }
+
+      // Clear OTP after successful verification
+      user.otp = undefined;
+      user.otpExpiry = undefined;
 
       const tokens = getJwtToken({
         _id: user._id,
@@ -493,6 +464,7 @@ export class UserMasterService {
         data: {
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
+          isFirstLogin: user.isFirstLogin,
         },
       };
     } catch (err) {
@@ -551,33 +523,33 @@ export class UserMasterService {
         };
       }
 
-      if (!user.isFirstLogin) {
-        return {
-          success: false,
-          data: { message: "OTP not required for this user" },
-          statusCode: StatusCodes.BAD_REQUEST,
-        };
-      }
-
       // Generate new 6-digit OTP
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
       user.otp = await argon2.hash(otp);
-      user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+      user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
       await user.save();
 
-      // Send Email
-      await sendMail({
-        to: user.loginEmail,
-        subject: "Your New OTP Code",
-        html: `<p>Your OTP is <b>${otp}</b>. It is valid for 10 minutes.</p>`,
-      });
+      try {
+        await sendMail({
+          to: user.loginEmail,
+          subject: "Your OTP Code",
+          html: `
+          <p>Hello ${user.userName},</p>
+          <p>Your OTP is <b>${otp}</b>.</p>
+          <p>This OTP is valid for 10 minutes.</p>
+        `,
+        });
+      } catch (mailError) {
+        console.error("Mail Error:", mailError.message);
+      }
 
       return {
         success: true,
         statusCode: StatusCodes.OK,
         data: {
-          message: "OTP resent successfully",
+          message: "OTP sent successfully",
         },
       };
     } catch (err) {
@@ -622,6 +594,7 @@ export class UserMasterService {
       }
 
       user.loginPassword = await argon2.hash(newPassword);
+      user.isFirstLogin = false;
       await user.save();
 
       return {
@@ -684,6 +657,80 @@ export class UserMasterService {
         success: true,
         statusCode: StatusCodes.OK,
         data: { message: "Reset OTP sent to email" },
+      };
+    } catch (err) {
+      return {
+        success: false,
+        data: { message: "Server error" },
+        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+      };
+    }
+  }
+
+  async resetPassword(data) {
+    try {
+      const { loginEmail, otp, newPassword } = data;
+
+      if (!loginEmail || !otp || !newPassword) {
+        return {
+          success: false,
+          data: { message: "Email, OTP and new password required" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      const email = loginEmail.toLowerCase().trim();
+
+      const user = await User.findOne({
+        loginEmail: email,
+        status: STATUS.ACTIVE,
+      });
+
+      if (!user) {
+        return {
+          success: false,
+          data: { message: "User not found" },
+          statusCode: StatusCodes.NOT_FOUND,
+        };
+      }
+
+      if (!user.resetOtp || !user.resetOtpExpiry) {
+        return {
+          success: false,
+          data: { message: "Reset OTP not generated" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      if (new Date() > user.resetOtpExpiry) {
+        return {
+          success: false,
+          data: { message: "OTP expired" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      const isValidOtp = await argon2.verify(user.resetOtp, otp);
+
+      if (!isValidOtp) {
+        return {
+          success: false,
+          data: { message: "Invalid OTP" },
+          statusCode: StatusCodes.UNAUTHORIZED,
+        };
+      }
+
+      user.loginPassword = await argon2.hash(newPassword);
+      user.resetOtp = undefined;
+      user.resetOtpExpiry = undefined;
+      user.refreshToken = undefined; // force logout everywhere
+
+      await user.save();
+
+      return {
+        success: true,
+        statusCode: StatusCodes.OK,
+        data: { message: "Password reset successfully" },
       };
     } catch (err) {
       return {

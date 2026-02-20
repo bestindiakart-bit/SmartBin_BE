@@ -415,6 +415,9 @@
  *               - currentPassword
  *               - newPassword
  *             properties:
+ *               email:
+ *                 type: string
+ *                 example: john@company.com
  *               currentPassword:
  *                 type: string
  *                 example: OldPass@123
@@ -503,4 +506,48 @@
  *                 message: User not found
  *       500:
  *         description: Server error
+ */
+
+/**
+ * @swagger
+ * /User/reset-password:
+ *   post:
+ *     summary: Verify OTP and Reset Password
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - loginEmail
+ *               - otp
+ *               - newPassword
+ *             properties:
+ *               loginEmail:
+ *                 type: string
+ *                 example: user@smartbin.com
+ *               otp:
+ *                 type: string
+ *                 example: 123456
+ *               newPassword:
+ *                 type: string
+ *                 example: NewPassword@123
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               statusCode: 200
+ *               data:
+ *                 message: Password reset successfully
+ *       400:
+ *         description: Validation error or OTP expired
+ *       401:
+ *         description: Invalid OTP
+ *       404:
+ *         description: User not found
  */

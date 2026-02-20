@@ -80,10 +80,9 @@ export class userTypeService {
         };
       }
 
-      const roles = await UserType.find(
-        { status: STATUS.ACTIVE },
-        { userTypeName: 1 }, // projection
-      ).lean();
+      const roles = await UserType.find({ status: STATUS.ACTIVE })
+        .select("userTypeName permissions")
+        .lean();
 
       return {
         success: true,

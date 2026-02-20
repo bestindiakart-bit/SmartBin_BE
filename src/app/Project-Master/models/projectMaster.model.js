@@ -21,6 +21,12 @@ const projectSchema = new mongoose.Schema(
       trim: true,
     },
 
+    slug: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
     projectId: {
       type: String,
       required: true,

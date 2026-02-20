@@ -103,4 +103,13 @@ export class UserMasterController extends ResponseHandler {
       return next(err);
     }
   };
+
+  resetPassword = async (req, res, next) => {
+    try {
+      const data = await this.service.resetPassword(req.body);
+      return res.status(data.statusCode).json(data);
+    } catch (err) {
+      return next(err);
+    }
+  };
 }

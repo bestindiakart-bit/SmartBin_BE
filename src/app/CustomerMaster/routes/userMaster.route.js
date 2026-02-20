@@ -48,4 +48,6 @@ userMasterRouter.post(
 
 userMasterRouter.post("/forgot-password", userMasterController.forgotPassword);
 
+userMasterRouter.post("/reset-password", userMasterController.resetPassword);
+
 export default userMasterRouter;
