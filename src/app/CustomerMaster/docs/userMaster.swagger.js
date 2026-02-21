@@ -10,6 +10,7 @@
  * /User:
  *   post:
  *     summary: Create a new user (ADMIN only)
+ *     description: Creates a user under the logged-in customer. Permissions can be assigned per module.
  *     tags: [Users]
  *     security:
  *       - userAuth: []
@@ -28,21 +29,129 @@
  *               userName:
  *                 type: string
  *                 example: John Doe
+ *
  *               loginEmail:
  *                 type: string
  *                 example: john@company.com
+ *
  *               loginPassword:
  *                 type: string
  *                 example: StrongPass@123
+ *
  *               userTypeId:
  *                 type: string
+ *                 description: UserType ObjectId
  *                 example: 65f2a1e4d2a123456789abcd
+ *
  *               position:
  *                 type: string
  *                 example: Manager
+ *
  *               mobile:
  *                 type: string
  *                 example: 9876543210
+ *
+ *               permissions:
+ *                 type: array
+ *                 description: Optional custom permissions for the user. All supported modules listed below.
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     module:
+ *                       type: string
+ *                       enum:
+ *                         - dashboard
+ *                         - customer_master
+ *                         - user_master
+ *                         - project_master
+ *                         - item_master
+ *                         - user_type_permission_master
+ *                         - warehouse_creation
+ *                         - warehouse_order_details
+ *                         - bin_configuration
+ *                         - bill_of_materials
+ *                         - forecast_viewer
+ *                         - smart_bin_dashboard
+ *                         - overall_report
+ *                     create:
+ *                       type: boolean
+ *                       example: true
+ *                     view:
+ *                       type: boolean
+ *                       example: true
+ *                     edit:
+ *                       type: boolean
+ *                       example: true
+ *                     delete:
+ *                       type: boolean
+ *                       example: false
+ *                 example:
+ *                   - module: dashboard
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: customer_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: user_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: project_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: item_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: user_type_permission_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: warehouse_creation
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: warehouse_order_details
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: bin_configuration
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: bill_of_materials
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: forecast_viewer
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: smart_bin_dashboard
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: overall_report
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *
  *     responses:
  *       201:
  *         description: User created successfully
@@ -69,6 +178,15 @@
  *                     loginEmail:
  *                       type: string
  *                       example: john@company.com
+ *
+ *       400:
+ *         description: Invalid request
+ *
+ *       409:
+ *         description: Email already exists
+ *
+ *       500:
+ *         description: Internal server error
  */
 
 /**
@@ -111,15 +229,20 @@
  * /User/{id}:
  *   put:
  *     summary: Update user details
+ *     description: Update user information including module-based permissions.
  *     tags: [Users]
  *     security:
  *       - userAuth: []
+ *
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
+ *         description: MongoDB ObjectId of the user
  *         schema:
  *           type: string
+ *           example: 65f2a1e4d2a123456789abcd
+ *
  *     requestBody:
  *       required: true
  *       content:
@@ -130,23 +253,144 @@
  *               userName:
  *                 type: string
  *                 example: Updated Name
+ *
  *               loginEmail:
  *                 type: string
  *                 example: updated@company.com
+ *
  *               userTypeId:
  *                 type: string
  *                 example: 65f2a1e4d2a123456789abcd
+ *
  *               position:
  *                 type: string
  *                 example: Senior Manager
+ *
  *               mobile:
  *                 type: string
  *                 example: 9999999999
+ *
+ *               permissions:
+ *                 type: array
+ *                 description: Module-level permissions for the user
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     module:
+ *                       type: string
+ *                       enum:
+ *                         - dashboard
+ *                         - customer_master
+ *                         - user_master
+ *                         - project_master
+ *                         - item_master
+ *                         - user_type_permission_master
+ *                         - warehouse_creation
+ *                         - warehouse_order_details
+ *                         - bin_configuration
+ *                         - bill_of_materials
+ *                         - forecast_viewer
+ *                         - smart_bin_dashboard
+ *                         - overall_report
+ *
+ *                     create:
+ *                       type: boolean
+ *                       example: true
+ *
+ *                     view:
+ *                       type: boolean
+ *                       example: true
+ *
+ *                     edit:
+ *                       type: boolean
+ *                       example: false
+ *
+ *                     delete:
+ *                       type: boolean
+ *                       example: false
+ *
+ *                 example:
+ *                   - module: dashboard
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: false
+ *                   - module: customer_master
+ *                     create: true
+ *                     view: true
+ *                     edit: false
+ *                     delete: false
+ *                   - module: user_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: false
+ *                   - module: project_master
+ *                     create: true
+ *                     view: true
+ *                     edit: false
+ *                     delete: false
+ *                   - module: item_master
+ *                     create: true
+ *                     view: true
+ *                     edit: false
+ *                     delete: false
+ *                   - module: user_type_permission_master
+ *                     create: true
+ *                     view: true
+ *                     edit: false
+ *                     delete: false
+ *                   - module: warehouse_creation
+ *                     create: true
+ *                     view: true
+ *                     edit: false
+ *                     delete: false
+ *                   - module: warehouse_order_details
+ *                     create: true
+ *                     view: true
+ *                     edit: false
+ *                     delete: false
+ *                   - module: bin_configuration
+ *                     create: true
+ *                     view: true
+ *                     edit: false
+ *                     delete: false
+ *                   - module: bill_of_materials
+ *                     create: true
+ *                     view: true
+ *                     edit: false
+ *                     delete: false
+ *                   - module: forecast_viewer
+ *                     create: true
+ *                     view: true
+ *                     edit: false
+ *                     delete: false
+ *                   - module: smart_bin_dashboard
+ *                     create: true
+ *                     view: true
+ *                     edit: false
+ *                     delete: false
+ *                   - module: overall_report
+ *                     create: true
+ *                     view: true
+ *                     edit: false
+ *                     delete: false
+ *
  *     responses:
  *       200:
  *         description: User updated successfully
+ *
+ *       400:
+ *         description: Invalid request
+ *
+ *       404:
+ *         description: User not found
+ *
  *       409:
  *         description: Email already exists
+ *
+ *       500:
+ *         description: Internal server error
  */
 
 /**

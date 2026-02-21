@@ -8,6 +8,9 @@ import { UserType } from "../models/userType.js";
 import mongoose from "mongoose";
 import { Customer } from "../models/customerMaster.model.js";
 import { generateUserId } from "../../../utils/generateUserId.util.js";
+import { CustomerType } from "../models/customerType.models.js";
+import { sendMail } from "../../../utils/mailer.js";
+import { buildPermissionsFromRequest } from "../../../utils/permission.util.js";
 
 export class CustomerMasterService {
   generateSlug(name) {
@@ -49,7 +52,9 @@ export class CustomerMasterService {
   }
 
   async create(data, loggedInUser) {
+    console.log("req.body", data);
     try {
+      // Basic Validation
       const error = this.validate(data);
       if (error) {
         return {
@@ -59,6 +64,33 @@ export class CustomerMasterService {
         };
       }
 
+      // Validate CustomerType ObjectId
+      if (!mongoose.Types.ObjectId.isValid(data.customerType)) {
+        return {
+          success: false,
+          data: { message: "Invalid customer type id" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      // Check CustomerType exists & active
+      const customerType = await CustomerType.findOne(
+        {
+          _id: data.customerType,
+          status: STATUS.ACTIVE,
+        },
+        { _id: 1, name: 1 },
+      ).lean();
+
+      if (!customerType) {
+        return {
+          success: false,
+          data: { message: "Customer type not found or inactive" },
+          statusCode: StatusCodes.NOT_FOUND,
+        };
+      }
+
+      //GST Duplicate Check
       const gstExists = await Customer.exists({
         gstNumber: data.gstNumber.toUpperCase(),
       });
@@ -71,6 +103,7 @@ export class CustomerMasterService {
         };
       }
 
+      // Email Duplicate Check
       const emailExists = await User.exists({
         loginEmail: data.adminEmail.toLowerCase(),
       });
@@ -83,10 +116,12 @@ export class CustomerMasterService {
         };
       }
 
+      // Generate IDs
       const customerId = await this.generateCustomerId();
       const userId = await generateUserId(data.companyName);
       const url = this.generateSlug(data.companyName);
 
+      // Get ADMIN Role
       const role = await UserType.findOne(
         { userTypeName: "ADMIN", status: STATUS.ACTIVE },
         { _id: 1 },
@@ -100,12 +135,16 @@ export class CustomerMasterService {
         };
       }
 
-      const hashedPassword = await argon2.hash(data.adminPassword);
+      // Hash Password
+      const plainPassword = data.adminPassword;
+      const hashedPassword = await argon2.hash(plainPassword);
 
+      // Create Customer
       const [customer] = await Customer.create([
         {
           ...data,
           customerId,
+          customerType: data.customerType,
           gstNumber: data.gstNumber.toUpperCase(),
           adminEmail: data.adminEmail.toLowerCase(),
           adminPassword: hashedPassword,
@@ -114,6 +153,10 @@ export class CustomerMasterService {
         },
       ]);
 
+      // Build permissions safely
+      const userPermissions = buildPermissionsFromRequest(data.permissions);
+
+      // Create Admin User
       await User.create([
         {
           userId,
@@ -124,10 +167,29 @@ export class CustomerMasterService {
           customerId: customer._id,
           companyName: data.companyName,
           url,
+          permissions: userPermissions,
           createdBy: loggedInUser.userName,
         },
       ]);
 
+      // Send Email (Do not break main flow if email fails)
+      try {
+        await sendMail({
+          to: data.adminEmail,
+          subject: "SmartBin Admin Account Created",
+          html: `
+          <h2>Welcome to SmartBin</h2>
+          <p>Your company <b>${data.companyName}</b> has been successfully registered.</p>
+          <p><b>Login Email:</b> ${data.adminEmail}</p>
+          <p><b>Password:</b> ${plainPassword}</p>
+          <p>Please login and change your password immediately.</p>
+        `,
+        });
+      } catch (mailError) {
+        console.error("Email sending failed:", mailError.message);
+      }
+
+      // Return Success
       return {
         success: true,
         statusCode: StatusCodes.CREATED,
@@ -135,6 +197,7 @@ export class CustomerMasterService {
           customerId,
           companyName: data.companyName,
           adminEmail: data.adminEmail,
+          customerType: customerType.name,
         },
       };
     } catch (error) {
@@ -145,7 +208,6 @@ export class CustomerMasterService {
       };
     }
   }
-
   async get(id) {
     try {
       const filter = { status: STATUS.ACTIVE };
@@ -195,27 +257,66 @@ export class CustomerMasterService {
     }
 
     try {
-      const customer = await Customer.findOne({ _id: id });
+      const customer = await Customer.findOne({
+        _id: id,
+        status: STATUS.ACTIVE,
+      });
 
       if (!customer) {
         return {
           success: false,
-          data: { message: "Customer not found" },
+          data: { message: "Customer not found or inactive" },
           statusCode: 404,
-        };
-      }
-
-      if (customer.status !== STATUS.ACTIVE) {
-        return {
-          success: false,
-          data: { message: "Cannot update inactive or deleted customer" },
-          statusCode: 400,
         };
       }
 
       const updateData = {
         updatedBy: loggedInUser.userName,
       };
+
+      /* ---------------- PERMISSIONS UPDATE ---------------- */
+      if (data.permissions && Array.isArray(data.permissions)) {
+        const normalizedPermissions = buildPermissionsFromRequest(
+          data.permissions,
+        );
+
+        await User.updateMany(
+          {
+            customerId: customer._id,
+            userTypeId: loggedInUser.userTypeId, // adjust if needed
+          },
+          {
+            permissions: normalizedPermissions,
+            updatedBy: loggedInUser.userName,
+          },
+        );
+      }
+
+      /* ---------------- CUSTOMER TYPE UPDATE ---------------- */
+      if (data.customerType) {
+        if (!mongoose.Types.ObjectId.isValid(data.customerType)) {
+          return {
+            success: false,
+            data: { message: "Invalid customer type id" },
+            statusCode: 400,
+          };
+        }
+
+        const customerType = await CustomerType.findOne({
+          _id: data.customerType,
+          status: STATUS.ACTIVE,
+        });
+
+        if (!customerType) {
+          return {
+            success: false,
+            data: { message: "Customer type not found or inactive" },
+            statusCode: 404,
+          };
+        }
+
+        updateData.customerType = data.customerType;
+      }
 
       /* ---------------- GST UPDATE ---------------- */
       if (data.gstNumber) {
@@ -242,15 +343,13 @@ export class CustomerMasterService {
       if (data.companyName) {
         const newCompany = data.companyName.trim();
 
-        const companyExists = await Customer.findOne(
-          {
-            companyName: newCompany,
-            _id: { $ne: id },
-          },
-          { status: 1 },
-        ).lean();
+        const companyExists = await Customer.exists({
+          companyName: newCompany,
+          _id: { $ne: id },
+          status: STATUS.ACTIVE,
+        });
 
-        if (companyExists && companyExists.status === STATUS.ACTIVE) {
+        if (companyExists) {
           return {
             success: false,
             data: { message: "Company name already exists" },
@@ -263,43 +362,19 @@ export class CustomerMasterService {
         updateData.companyName = newCompany;
         updateData.url = newUrl;
 
-        // Propagate to users
         await User.updateMany(
-          { customerId: id },
+          { customerId: customer._id },
           {
             companyName: newCompany,
             url: newUrl,
+            updatedBy: loggedInUser.userName,
           },
         );
-      }
-
-      /* ---------------- ADMIN EMAIL UPDATE ---------------- */
-      if (data.adminEmail) {
-        const newEmail = data.adminEmail.toLowerCase();
-
-        const emailExists = await User.exists({
-          loginEmail: newEmail,
-          customerId: { $ne: id },
-          status: STATUS.ACTIVE,
-        });
-
-        if (emailExists) {
-          return {
-            success: false,
-            data: { message: "Admin email already exists" },
-            statusCode: 409,
-          };
-        }
-
-        updateData.adminEmail = newEmail;
-
-        await User.updateMany({ customerId: id }, { loginEmail: newEmail });
       }
 
       /* ---------------- OTHER FIELDS ---------------- */
       const allowed = [
         "customerName",
-        "customerType",
         "transitDays",
         "shippingAddress1",
         "shippingAddress2",
@@ -316,7 +391,10 @@ export class CustomerMasterService {
       const updatedCustomer = await Customer.findOneAndUpdate(
         { _id: id },
         updateData,
-        { new: true, projection: { adminPassword: 0 } },
+        {
+          new: true,
+          projection: { adminPassword: 0 },
+        },
       );
 
       return {
@@ -337,7 +415,6 @@ export class CustomerMasterService {
       };
     }
   }
-
   async delete(id, loggedInUser) {
     try {
       const customer = await Customer.findOneAndUpdate(

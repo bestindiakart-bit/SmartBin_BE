@@ -57,7 +57,7 @@ const seed = async () => {
       }));
 
       const createdUserType = await UserType.create({
-        userTypeName: seedData.userType.userTypeName,
+        userTypeName: seedData.UserType.userTypeName,
         permissions: fullPermissions,
         status: STATUS.ACTIVE,
         createdBy: "SEED_SCRIPT",
@@ -123,6 +123,7 @@ const seed = async () => {
         companyName: customer.companyName,
         url: customer.url, // using same slug as customer
         status: STATUS.ACTIVE,
+        permissions: userType.permissions,
         createdBy: "SEED_SCRIPT",
       });
 

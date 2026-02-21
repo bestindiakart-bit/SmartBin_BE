@@ -1,6 +1,17 @@
 import mongoose from "mongoose";
 import { STATUS } from "../../../constants/status.js";
 
+const permissionSchema = new mongoose.Schema(
+  {
+    module: String,
+    create: Boolean,
+    view: Boolean,
+    edit: Boolean,
+    delete: Boolean,
+  },
+  { _id: false },
+);
+
 const userSchema = new mongoose.Schema(
   {
     userId: {
@@ -32,15 +43,12 @@ const userSchema = new mongoose.Schema(
     userTypeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "UserType",
-      required: true,
-      index: true,
     },
 
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
       required: true,
-      index: true,
     },
 
     companyName: {
@@ -52,6 +60,10 @@ const userSchema = new mongoose.Schema(
     position: {
       type: String,
       trim: true,
+    },
+    permissions: {
+      type: [permissionSchema],
+      default: [],
     },
 
     mobile: {
@@ -78,7 +90,6 @@ const userSchema = new mongoose.Schema(
       type: Number,
       enum: Object.values(STATUS),
       default: STATUS.ACTIVE,
-      index: true,
     },
 
     createdBy: {

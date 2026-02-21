@@ -64,6 +64,7 @@
  * /customer-master:
  *   post:
  *     summary: Create a new customer with admin user
+ *     description: Creates a customer along with an ADMIN user. Optionally accepts custom permissions for the admin user.
  *     tags: [Customers]
  *     security:
  *       - userAuth: []
@@ -81,42 +82,52 @@
  *               - adminEmail
  *               - adminPassword
  *               - shippingAddress1
- *               - shippingAddress2
  *               - billingAddress
- *               - geoLocation
  *             properties:
  *               companyName:
  *                 type: string
  *                 example: Smart Bin Pvt Ltd
+ *
  *               customerName:
  *                 type: string
  *                 example: Rahim
- *               customerType:
- *                 type: string
- *                 example: Premium
+ *
  *               transitDays:
  *                 type: number
  *                 example: 5
+ *
  *               gstNumber:
  *                 type: string
  *                 example: 29ABCDE1234F1Z5
+ *
  *               adminEmail:
  *                 type: string
  *                 example: admin@smartbin.com
+ *
  *               adminPassword:
  *                 type: string
  *                 example: StrongPassword@123
+ *
  *               shippingAddress1:
  *                 type: string
- *                 example: Chennai
+ *                 example: Chennai Warehouse
+ *
  *               shippingAddress2:
  *                 type: string
  *                 example: Tamil Nadu
+ *
  *               billingAddress:
  *                 type: string
- *                 example: Chennai Billing
+ *                 example: Chennai Billing Office
+ *
+ *               customerType:
+ *                 type: string
+ *                 description: CustomerType ObjectId
+ *                 example: 69981f122f12e02c409474bf
+ *
  *               geoLocation:
  *                 type: object
+ *                 description: GeoJSON location object
  *                 properties:
  *                   type:
  *                     type: string
@@ -126,6 +137,108 @@
  *                     items:
  *                       type: number
  *                     example: [80.2707, 13.0827]
+ *
+ *               permissions:
+ *                 type: array
+ *                 description: Optional custom permissions for admin user. All supported modules listed below.
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     module:
+ *                       type: string
+ *                       enum:
+ *                         - dashboard
+ *                         - customer_master
+ *                         - user_master
+ *                         - project_master
+ *                         - item_master
+ *                         - user_type_permission_master
+ *                         - warehouse_creation
+ *                         - warehouse_order_details
+ *                         - bin_configuration
+ *                         - bill_of_materials
+ *                         - forecast_viewer
+ *                         - smart_bin_dashboard
+ *                         - overall_report
+ *                     create:
+ *                       type: boolean
+ *                       example: true
+ *                     view:
+ *                       type: boolean
+ *                       example: true
+ *                     edit:
+ *                       type: boolean
+ *                       example: true
+ *                     delete:
+ *                       type: boolean
+ *                       example: false
+ *                 example:
+ *                   - module: dashboard
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: customer_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: user_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: project_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: item_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: user_type_permission_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: warehouse_creation
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: warehouse_order_details
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: bin_configuration
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: bill_of_materials
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: forecast_viewer
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: smart_bin_dashboard
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: overall_report
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *
  *     responses:
  *       201:
  *         description: Customer created successfully
@@ -152,6 +265,21 @@
  *                     adminEmail:
  *                       type: string
  *                       example: admin@smartbin.com
+ *                     customerType:
+ *                       type: string
+ *                       example: INDUSTRIAL
+ *
+ *       400:
+ *         description: Invalid request data
+ *
+ *       404:
+ *         description: Customer type or ADMIN role not found
+ *
+ *       409:
+ *         description: Duplicate GST or Admin email
+ *
+ *       500:
+ *         description: Internal server error
  */
 
 /**
@@ -210,16 +338,21 @@
  * @swagger
  * /customer-master/{id}:
  *   put:
- *     summary: Update customer details
+ *     summary: Update Customer Type
+ *     description: Update customer type details including default module permissions.
  *     tags: [Customers]
  *     security:
  *       - userAuth: []
+ *
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
+ *         description: MongoDB ObjectId of the Customer Type
  *         schema:
  *           type: string
+ *           example: 65f2a1e4d2a123456789abcd
+ *
  *     requestBody:
  *       required: true
  *       content:
@@ -227,24 +360,161 @@
  *           schema:
  *             type: object
  *             properties:
- *               companyName:
+ *               customerTypeName:
  *                 type: string
- *                 example: Smart Bin Updated
- *               customerName:
- *                 type: string
- *                 example: Rahim Updated
- *               transitDays:
- *                 type: number
- *                 example: 7
- *               shippingAddress1:
- *                 type: string
- *               billingAddress:
- *                 type: string
- *               geoLocation:
- *                 type: object
+ *                 description: Name of the customer type
+ *                 example: Enterprise Plan
+ *
+ *               status:
+ *                 type: integer
+ *                 description: Status of the customer type (1 = ACTIVE, 0 = INACTIVE)
+ *                 enum: [0, 1]
+ *                 example: 1
+ *
+ *               permissions:
+ *                 type: array
+ *                 description: Default module permissions for this customer type
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     module:
+ *                       type: string
+ *                       enum:
+ *                         - dashboard
+ *                         - customer_master
+ *                         - user_master
+ *                         - project_master
+ *                         - item_master
+ *                         - user_type_permission_master
+ *                         - warehouse_creation
+ *                         - warehouse_order_details
+ *                         - bin_configuration
+ *                         - bill_of_materials
+ *                         - forecast_viewer
+ *                         - smart_bin_dashboard
+ *                         - overall_report
+ *
+ *                     create:
+ *                       type: boolean
+ *                       example: true
+ *
+ *                     view:
+ *                       type: boolean
+ *                       example: true
+ *
+ *                     edit:
+ *                       type: boolean
+ *                       example: true
+ *
+ *                     delete:
+ *                       type: boolean
+ *                       example: false
+ *
+ *                 example:
+ *                   - module: dashboard
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: customer_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: user_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: project_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: item_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: user_type_permission_master
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: warehouse_creation
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: warehouse_order_details
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: bin_configuration
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: bill_of_materials
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: forecast_viewer
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: smart_bin_dashboard
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *                   - module: overall_report
+ *                     create: true
+ *                     view: true
+ *                     edit: true
+ *                     delete: true
+ *
  *     responses:
  *       200:
- *         description: Customer updated successfully
+ *         description: Customer Type updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 200
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     customerTypeId:
+ *                       type: string
+ *                       example: SBCTYPE-002
+ *                     customerTypeName:
+ *                       type: string
+ *                       example: Enterprise Plan
+ *                     status:
+ *                       type: integer
+ *                       example: 1
+ *
+ *       400:
+ *         description: Invalid request data
+ *
+ *       404:
+ *         description: Customer Type not found
+ *
+ *       409:
+ *         description: Duplicate customer type name
+ *
+ *       500:
+ *         description: Internal server error
  */
 
 /**
