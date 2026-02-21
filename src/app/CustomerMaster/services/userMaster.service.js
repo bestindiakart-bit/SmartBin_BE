@@ -8,6 +8,7 @@ import { UserType } from "../models/userType.js";
 import { generateUserId } from "../../../utils/generateUserId.util.js";
 import { getJwtToken } from "../../../utils/token.utils.js";
 import { sendMail } from "../../../utils/mailer.js";
+import { buildPermissionsFromRequest } from "../../../utils/permission.util.js";
 
 export class UserMasterService {
   async create(data, loggedInUser) {
@@ -22,19 +23,11 @@ export class UserMasterService {
         mobile,
       } = data;
 
-      if (!userName || !loginEmail || !loginPassword || !userTypeId) {
+      if (!userName || !loginEmail || !loginPassword) {
         return {
           success: false,
           data: { errors: "Required fields missing" },
           statusCode: StatusCodes.BAD_REQUEST,
-        };
-      }
-
-      if (!mongoose.Types.ObjectId.isValid(userTypeId)) {
-        return {
-          success: false,
-          data: { errors: "Invalid userTypeId" },
-          statusCode: 400,
         };
       }
 
@@ -64,24 +57,34 @@ export class UserMasterService {
         };
       }
 
-      // Check userType exists
-      const role = await UserType.findOne({
-        _id: userTypeId,
-      }).lean();
+      if (userTypeId) {
+        const role = await UserType.findOne({
+          _id: userTypeId,
+        }).lean();
 
-      console.log(role);
-
-      if (!role) {
-        return {
-          success: false,
-          data: { message: "Invalid user type" },
-          statusCode: 400,
-        };
+        if (!role) {
+          return {
+            success: false,
+            data: { message: "Invalid user type" },
+            statusCode: 400,
+          };
+        }
       }
 
       const userId = await generateUserId(customer.companyName);
 
       const hashedPassword = await argon2.hash(loginPassword);
+
+      // Build Permissions
+      let finalPermissions;
+
+      // If frontend sends permissions → normalize it
+      if (data.permissions && Array.isArray(data.permissions)) {
+        finalPermissions = buildPermissionsFromRequest(data.permissions);
+      } else {
+        // Otherwise inherit from role (UserType)
+        finalPermissions = role.permissions || [];
+      }
 
       const user = await User.create({
         userId,
@@ -94,6 +97,7 @@ export class UserMasterService {
         url: customer.url,
         position,
         mobile,
+        permissions: finalPermissions,
         createdBy: loggedInUser.userName,
       });
 
@@ -194,12 +198,14 @@ export class UserMasterService {
         updatedBy: loggedInUser.userName,
       };
 
+      /* ---------------- EMAIL UPDATE ---------------- */
       if (data.loginEmail) {
         const email = data.loginEmail.toLowerCase();
 
         const exists = await User.exists({
           loginEmail: email,
           _id: { $ne: id },
+          status: STATUS.ACTIVE,
         });
 
         if (exists) {
@@ -213,12 +219,41 @@ export class UserMasterService {
         updateData.loginEmail = email;
       }
 
-      const allowed = ["userName", "userTypeId", "position", "mobile"];
+      /* ---------------- USER TYPE VALIDATION ---------------- */
+      if (data.userTypeId) {
+        if (!mongoose.Types.ObjectId.isValid(data.userTypeId)) {
+          return {
+            success: false,
+            data: { errors: "Invalid userTypeId" },
+            statusCode: 400,
+          };
+        }
+
+        const role = await UserType.findById(data.userTypeId).lean();
+
+        if (!role) {
+          return {
+            success: false,
+            data: { errors: "UserType not found" },
+            statusCode: 404,
+          };
+        }
+
+        updateData.userTypeId = data.userTypeId;
+      }
+
+      /* ---------------- BASIC FIELDS ---------------- */
+      const allowed = ["userName", "position", "mobile"];
 
       for (let key of allowed) {
         if (data[key] !== undefined) {
           updateData[key] = data[key];
         }
+      }
+
+      /* ---------------- PERMISSIONS ---------------- */
+      if (data.permissions && Array.isArray(data.permissions)) {
+        updateData.permissions = buildPermissionsFromRequest(data.permissions);
       }
 
       const updated = await User.findOneAndUpdate(
@@ -228,7 +263,10 @@ export class UserMasterService {
           status: STATUS.ACTIVE,
         },
         updateData,
-        { new: true, projection: { loginPassword: 0 } },
+        {
+          returnDocument: "after",
+          projection: { loginPassword: 0 },
+        },
       ).lean();
 
       if (!updated) {
@@ -252,6 +290,7 @@ export class UserMasterService {
       };
     }
   }
+
   async delete(id, loggedInUser) {
     try {
       if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -350,6 +389,7 @@ export class UserMasterService {
 
       // Always generate OTP after password validation
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otp1 = otp;
 
       user.otp = await argon2.hash(otp);
       user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -376,6 +416,7 @@ export class UserMasterService {
         data: {
           message: "OTP sent to registered email",
           email: user.loginEmail,
+          otp: otp1,
         },
       };
     } catch (err) {
@@ -406,6 +447,8 @@ export class UserMasterService {
         loginEmail: email,
         status: STATUS.ACTIVE,
       }).populate("userTypeId");
+
+      console.log(user);
 
       if (!user) {
         return {
@@ -447,10 +490,11 @@ export class UserMasterService {
 
       const tokens = getJwtToken({
         _id: user._id,
+        role: user.userTypeId.userTypeName,
         customerId: user.customerId,
         userName: user.userName,
         url: user.url,
-        userTypeId: user.userTypeId,
+        permissions: user.permissions,
       });
 
       const hashedRefresh = await argon2.hash(tokens.refreshToken);
@@ -470,7 +514,7 @@ export class UserMasterService {
     } catch (err) {
       return {
         success: false,
-        data: { message: "Server error" },
+        data: { message: "Server error", error: err.message },
         statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
       };
     }

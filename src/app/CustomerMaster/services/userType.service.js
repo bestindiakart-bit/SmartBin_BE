@@ -3,6 +3,7 @@ import { STATUS } from "../../../constants/status.js";
 import { UserType } from "../models/userType.js";
 import { buildPermissionsFromRequest } from "../../../utils/permission.util.js";
 import { User } from "../models/userMaster.model.js";
+import mongoose from "mongoose";
 
 export class userTypeService {
   async create(data, loggedInUser) {
@@ -57,43 +58,75 @@ export class userTypeService {
   }
   async get(id) {
     try {
-      if (id) {
-        const role = await UserType.findOne({
-          _id: id,
-          status: STATUS.ACTIVE,
-        })
-          .select("userTypeName permissions")
-          .lean();
+      const matchStage = {
+        status: STATUS.ACTIVE,
+      };
 
-        if (!role) {
+      if (id) {
+        if (!mongoose.Types.ObjectId.isValid(id)) {
           return {
             success: false,
-            data: { errors: "Role not found" },
-            statusCode: StatusCodes.NOT_FOUND,
+            data: { message: "Invalid ID" },
+            statusCode: StatusCodes.BAD_REQUEST,
           };
         }
 
+        matchStage._id = new mongoose.Types.ObjectId(id);
+      }
+
+      const roles = await UserType.aggregate([
+        { $match: matchStage },
+
+        {
+          $lookup: {
+            from: "users", // collection name (check your actual collection)
+            localField: "_id",
+            foreignField: "userTypeId",
+            as: "users",
+          },
+        },
+
+        {
+          $addFields: {
+            userCount: {
+              $size: {
+                $filter: {
+                  input: "$users",
+                  as: "u",
+                  cond: { $eq: ["$$u.status", STATUS.ACTIVE] },
+                },
+              },
+            },
+          },
+        },
+
+        {
+          $project: {
+            userTypeName: 1,
+            permissions: 1,
+            userCount: 1,
+          },
+        },
+      ]);
+
+      if (id && roles.length === 0) {
         return {
-          success: true,
-          data: role,
-          statusCode: StatusCodes.OK,
+          success: false,
+          data: { message: "Role not found" },
+          statusCode: StatusCodes.NOT_FOUND,
         };
       }
 
-      const roles = await UserType.find({ status: STATUS.ACTIVE })
-        .select("userTypeName permissions")
-        .lean();
-
       return {
         success: true,
-        data: roles,
         statusCode: StatusCodes.OK,
+        data: id ? roles[0] : roles,
       };
-    } catch {
+    } catch (err) {
       return {
         success: false,
-        data: { errors: "Server error" },
         statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+        data: { message: err.message },
       };
     }
   }

@@ -25,10 +25,8 @@ const customerSchema = new mongoose.Schema(
     },
 
     customerType: {
-      type: String,
-      required: true,
-      trim: true,
-      index: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CustomerType",
     },
 
     transitDays: {

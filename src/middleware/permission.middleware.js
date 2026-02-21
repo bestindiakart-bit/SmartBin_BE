@@ -1,19 +1,26 @@
-import mongoose from "mongoose";
-import { UserType } from "../app/CustomerMaster/models/userType.js";
+import { User } from "../app/CustomerMaster/models/userMaster.model.js";
 import { STATUS } from "../constants/status.js";
 
 export const authorize = (moduleName, action) => {
   return async (req, res, next) => {
-    const userTypeId = req.decodedToken.data.userTypeId._id;
-
     try {
-      const userType = await UserType.findById(userTypeId).lean();
+      const userId = req.decodedToken.data._id;
 
-      if (!userType) {
-        return res.status(403).json({ message: "Invalid user type" });
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const modulePermission = userType.permissions.find(
+      // Fetch user with permissions
+      const user = await User.findById(userId)
+        .select("permissions status")
+        .lean();
+
+      if (!user || user.status !== STATUS.ACTIVE) {
+        return res.status(403).json({ message: "User inactive or not found" });
+      }
+
+      // Find module permission
+      const modulePermission = user.permissions.find(
         (p) => p.module === moduleName,
       );
 

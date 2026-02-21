@@ -12,7 +12,7 @@ export function authenticate(roles = [], tokenType = "accessToken") {
       "jwt",
       { session: false },
       (err, decodedToken, info) => {
-        // 1️⃣ Passport error
+        //  Passport error
         if (err) {
           return res.status(StatusCodes.UNAUTHORIZED).json({
             success: false,
