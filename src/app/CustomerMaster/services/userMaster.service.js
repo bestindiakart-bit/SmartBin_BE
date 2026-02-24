@@ -141,39 +141,72 @@ export class UserMasterService {
 
   async get(id, loggedInUser) {
     try {
+      const customerObjectId = new mongoose.Types.ObjectId(
+        loggedInUser.customerId,
+      );
       const filter = {
-        customerId: loggedInUser.customerId,
-        status: STATUS.ACTIVE,
+        customerId: customerObjectId,
+        status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
+        isMainAdmin: { $ne: true }, // Always exclude main admin
       };
 
       if (id) {
         if (!mongoose.Types.ObjectId.isValid(id)) {
           return {
             success: false,
-            data: { errors: "Invalid user ID" },
+            data: { message: "Invalid user ID" },
             statusCode: 400,
           };
         }
-        filter._id = id;
+
+        filter._id = new mongoose.Types.ObjectId(id);
       }
 
+      // Get users
       const users = await User.find(filter, {
         loginPassword: 0,
         refreshToken: 0,
-      }).lean();
+      })
+        .populate("userTypeId", "userTypeName")
+        .lean();
 
       if (id && users.length === 0) {
         return {
           success: false,
-          data: { errors: "User not found" },
+          data: { message: "User not found" },
           statusCode: 404,
         };
       }
 
+      // Get role counts using aggregation
+      const roleCounts = await User.aggregate([
+        { $match: filter },
+        { $group: { _id: "$userTypeId", count: { $sum: 1 } } },
+        {
+          $lookup: {
+            from: "usertypes",
+            localField: "_id",
+            foreignField: "_id",
+            as: "role",
+          },
+        },
+        { $unwind: "$role" },
+        {
+          $project: {
+            _id: 0,
+            role: "$role.userTypeName",
+            count: 1,
+          },
+        },
+      ]);
+
       return {
         success: true,
         statusCode: 200,
-        data: id ? users[0] : users,
+        data: {
+          users: id ? users[0] : users,
+          roleCounts,
+        },
       };
     } catch (error) {
       return {
@@ -243,7 +276,7 @@ export class UserMasterService {
       }
 
       /* ---------------- BASIC FIELDS ---------------- */
-      const allowed = ["userName", "position", "mobile"];
+      const allowed = ["userName", "position", "mobile", "status"];
 
       for (let key of allowed) {
         if (data[key] !== undefined) {
@@ -260,7 +293,7 @@ export class UserMasterService {
         {
           _id: id,
           customerId: loggedInUser.customerId,
-          status: STATUS.ACTIVE,
+          status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
         },
         updateData,
         {
@@ -292,6 +325,7 @@ export class UserMasterService {
   }
 
   async delete(id, loggedInUser) {
+    console.log(id);
     try {
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return {
@@ -308,7 +342,7 @@ export class UserMasterService {
           status: STATUS.ACTIVE,
         },
         {
-          status: STATUS.INACTIVE,
+          status: STATUS.DELETED,
           updatedBy: loggedInUser.userName,
         },
         { new: true },

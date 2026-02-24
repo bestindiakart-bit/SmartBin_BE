@@ -26,6 +26,11 @@ userMasterRouter
     authorize("user_master", "edit"),
     userMasterController.update,
   )
+  .get(
+    authenticate(),
+    authorize("user_master", "view"),
+    userMasterController.get,
+  )
   .delete(
     authenticate(),
     authorize("user_master", "delete"),

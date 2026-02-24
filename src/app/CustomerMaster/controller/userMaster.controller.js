@@ -19,6 +19,7 @@ export class UserMasterController extends ResponseHandler {
   };
 
   get = async (req, res, next) => {
+    console.log(req.params.id);
     try {
       const data = await this.service.get(req.params.id, req.user);
       return res.status(data.statusCode).json(data);

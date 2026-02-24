@@ -210,12 +210,14 @@ export class CustomerMasterService {
   }
   async get(id) {
     try {
-      const filter = { status: STATUS.ACTIVE };
+      const filter = { status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] } };
       if (id) filter._id = id;
 
       const customers = await Customer.find(filter, {
         adminPassword: 0,
-      }).lean();
+      })
+        .populate("customerType", "customerTypeName")
+        .lean();
 
       if (id && !customers.length) {
         return {
@@ -259,7 +261,7 @@ export class CustomerMasterService {
     try {
       const customer = await Customer.findOne({
         _id: id,
-        status: STATUS.ACTIVE,
+        status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
       });
 
       if (!customer) {
@@ -380,6 +382,7 @@ export class CustomerMasterService {
         "shippingAddress2",
         "billingAddress",
         "geoLocation",
+        "status",
       ];
 
       for (let key of allowed) {

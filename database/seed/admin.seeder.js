@@ -36,7 +36,7 @@ const seed = async () => {
       const cleanName = name.replace(/\s+/g, "");
       const prefix = cleanName.substring(0, 4).padEnd(4, "X").toUpperCase();
 
-      return `${prefix}-USER001`;
+      return `${prefix}-USER-001`;
     };
 
     /* -------------------------------
@@ -123,8 +123,9 @@ const seed = async () => {
         companyName: customer.companyName,
         url: customer.url, // using same slug as customer
         status: STATUS.ACTIVE,
+        isMainAdmin: true,
         permissions: userType.permissions,
-        createdBy: "SEED_SCRIPT",
+        createdBy: "SEED SCRIPT",
       });
 
       console.log("Admin user created");

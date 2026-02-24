@@ -29,7 +29,7 @@ export class ItemMasterService {
         itemImages,
       } = data;
 
-      // 1️⃣ Required Validation
+      // Required Validation
       if (!itemName?.trim()) {
         return {
           success: false,
@@ -38,7 +38,7 @@ export class ItemMasterService {
         };
       }
 
-      // 2️⃣ Validate itemCategory ObjectId
+      // Validate itemCategory ObjectId
       if (itemCategory && !mongoose.Types.ObjectId.isValid(itemCategory)) {
         return {
           success: false,
@@ -47,7 +47,7 @@ export class ItemMasterService {
         };
       }
 
-      // 3️⃣ Unique Check (customer + itemName)
+      // Unique Check (customer + itemName)
       const exists = await ItemMaster.exists({
         customerId: loggedInUser.customerId,
         itemName: itemName.trim(),
@@ -61,7 +61,7 @@ export class ItemMasterService {
         };
       }
 
-      // 4️⃣ Generate Item ID
+      // Generate Item ID
       const lastItem = await ItemMaster.findOne(
         {},
         { itemId: 1 },
@@ -77,7 +77,7 @@ export class ItemMasterService {
 
       const itemId = `SBITEM-${String(nextNumber).padStart(3, "0")}`;
 
-      // 5️⃣ Create Item
+      // Create Item
       const item = await ItemMaster.create({
         customerId: loggedInUser.customerId,
         itemId,
@@ -105,7 +105,7 @@ export class ItemMasterService {
         createdBy: loggedInUser.userName,
       });
 
-      // 6️⃣ Log Activity
+      // Log Activity
       await logActivity({
         userId: loggedInUser._id,
         entityType: "ItemMaster",
@@ -201,10 +201,14 @@ export class ItemMasterService {
         };
       }
 
+      console.log(id);
+
       const item = await ItemMaster.findOne({
         _id: id,
         customerId: loggedInUser.customerId,
       }).lean();
+
+      console.log(item);
 
       if (!item) {
         return {
@@ -283,7 +287,7 @@ export class ItemMasterService {
 
       const allowedFields = [
         "itemName",
-        "itemCategory", // ✅ keep this
+        "itemCategory",
         "partNumber",
         "itemDescription",
         "remarks",
@@ -306,19 +310,19 @@ export class ItemMasterService {
         }
       }
 
-      // 6️⃣ Handle Images (Add Without Removing Old)
+      // Handle Images (Add Without Removing Old)
       if (Array.isArray(data.itemImages) && data.itemImages.length > 0) {
         updateData.itemImages = [
           ...new Set([...(existingItem.itemImages || []), ...data.itemImages]),
         ];
       }
 
-      // 7️⃣ Update Document
+      // Update Document
       const updatedItem = await ItemMaster.findByIdAndUpdate(id, updateData, {
         new: true,
       }).lean();
 
-      // 8️⃣ Log Activity
+      // Log Activity
       await logActivity({
         userId: loggedInUser._id,
         entityType: "ItemMaster",
@@ -327,7 +331,7 @@ export class ItemMasterService {
         description: `${loggedInUser.userName} updated item ${updatedItem.itemId}`,
       });
 
-      // 9️⃣ Return Response
+      // Return Response
       return {
         success: true,
         statusCode: StatusCodes.OK,

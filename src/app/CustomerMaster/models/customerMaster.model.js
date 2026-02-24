@@ -71,6 +71,11 @@ const customerSchema = new mongoose.Schema(
       required: true,
     },
 
+    isMainAdmin: {
+      type: Boolean,
+      default: false,
+    },
+
     geoLocation: {
       type: {
         type: String,

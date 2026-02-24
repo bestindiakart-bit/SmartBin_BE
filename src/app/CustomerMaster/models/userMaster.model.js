@@ -45,6 +45,11 @@ const userSchema = new mongoose.Schema(
       ref: "UserType",
     },
 
+    isMainAdmin: {
+      type: Boolean,
+      default: false,
+    },
+
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",

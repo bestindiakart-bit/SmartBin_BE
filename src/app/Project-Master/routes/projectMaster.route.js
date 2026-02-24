@@ -24,7 +24,7 @@ projectMasterRouter
   .get(
     authenticate(),
     authorize("project_master", "view"),
-    projectMasterController.getById,
+    projectMasterController.get,
   )
   .put(
     authenticate(),

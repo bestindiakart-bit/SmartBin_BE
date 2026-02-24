@@ -19,7 +19,7 @@ export class ProjectMasterController extends ResponseHandler {
 
   get = async (req, res, next) => {
     try {
-      const data = await this.service.get(req.query, req.user);
+      const data = await this.service.get(req.params.id, req.user);
       return res.status(data.statusCode).json(data);
     } catch (error) {
       return next(error);
@@ -44,13 +44,13 @@ export class ProjectMasterController extends ResponseHandler {
     }
   };
 
-  getById = async (req, res, next) => {
-    try {
-      const data = await this.service.getById(req.params.id, req.user);
+  // getById = async (req, res, next) => {
+  //   try {
+  //     const data = await this.service.getById(req.params.id, req.user);
 
-      return res.status(data.statusCode).json(data);
-    } catch (error) {
-      return next(error);
-    }
-  };
+  //     return res.status(data.statusCode).json(data);
+  //   } catch (error) {
+  //     return next(error);
+  //   }
+  // };
 }

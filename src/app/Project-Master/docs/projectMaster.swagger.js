@@ -17,6 +17,7 @@
  *               - projectHead
  *               - projectManager
  *               - startDate
+ *               - slug
  *             properties:
  *               projectName:
  *                 type: string
@@ -40,6 +41,9 @@
  *               projectDescription:
  *                 type: string
  *                 example: IoT Smart Bin Deployment across Chennai
+ *               slug:
+ *                 type: string
+ *                 example: smart-waste-monitoring
  *     responses:
  *       201:
  *         description: Project created successfully

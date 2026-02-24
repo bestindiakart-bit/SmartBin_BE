@@ -24,6 +24,11 @@ itemMasterRouter
 
 itemMasterRouter
   .route("/:id")
+  .get(
+    authenticate(),
+    authorize("item_master", "view"),
+    itemMasterController.getById,
+  )
   .put(
     authenticate(),
     authorize("item_master", "edit"),

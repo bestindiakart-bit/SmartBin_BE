@@ -30,7 +30,7 @@ customerMasterRouter.get(
   customerMasterController.getProfile,
 );
 
-customerMasterRouter.use(authenticate(["MASTER_ADMIN"]));
+customerMasterRouter.use(authenticate(["MASTER_ADMIN", "ADMIN"]));
 
 customerMasterRouter
   .route("/")

@@ -7,6 +7,8 @@ import { logActivity } from "../../../utils/activity.util.js";
 
 export class ProjectMasterService {
   async create(data, loggedInUser) {
+    console.log("ProjectMasterService", data);
+    console.log("loggedInUser", loggedInUser);
     try {
       const {
         projectName,
@@ -17,6 +19,8 @@ export class ProjectMasterService {
         projectDescription,
         slug,
       } = data;
+
+      console.log(projectHead, projectManager);
 
       if (
         !projectName ||
@@ -34,7 +38,7 @@ export class ProjectMasterService {
 
       const formattedSlug = slug.toLowerCase().trim();
 
-      // 🔥 Check slug existence
+      // Check slug existence
       const existingSlug = await Project.findOne({
         slug: formattedSlug,
         customerId: loggedInUser.customerId,
@@ -74,6 +78,8 @@ export class ProjectMasterService {
       })
         .select("_id userName")
         .lean();
+
+      console.log(users);
 
       if (users.length !== 2) {
         return {
@@ -151,21 +157,56 @@ export class ProjectMasterService {
 
   async get(query, loggedInUser) {
     try {
-      const page = Number(query.page) || 1;
-      const limit = Number(query.limit) || 10;
-      const skip = (page - 1) * limit;
+      // const page = Number(query.page) || 1;
+      // const limit = Number(query.limit) || 10;
+      // const skip = (page - 1) * limit;
 
-      const filter = {
-        customerId: loggedInUser.customerId,
-        status: STATUS.ACTIVE,
+      const baseFilter = {
+        customerId: new mongoose.Types.ObjectId(loggedInUser.customerId),
+        status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
       };
+
+      // If projectId provided → return single project
+      if (query) {
+        if (!mongoose.Types.ObjectId.isValid(query)) {
+          return {
+            success: false,
+            data: { message: "Invalid project ID" },
+            statusCode: StatusCodes.BAD_REQUEST,
+          };
+        }
+
+        const project = await Project.findOne({
+          ...baseFilter,
+          _id: new mongoose.Types.ObjectId(query),
+        })
+          .populate("customerId", "customerName")
+          .lean();
+
+        if (!project) {
+          return {
+            success: false,
+            data: { message: "Project not found" },
+            statusCode: StatusCodes.NOT_FOUND,
+          };
+        }
+
+        return {
+          success: true,
+          statusCode: StatusCodes.OK,
+          data: project,
+        };
+      }
+
+      // Otherwise return paginated list
+      const filter = baseFilter;
 
       const [projects, total] = await Promise.all([
         Project.find(filter)
+          .populate("customerId", "customerName")
           .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(limit)
           .lean(),
+
         Project.countDocuments(filter),
       ]);
 
@@ -174,8 +215,6 @@ export class ProjectMasterService {
         statusCode: StatusCodes.OK,
         data: {
           total,
-          page,
-          limit,
           projects,
         },
       };
@@ -189,6 +228,7 @@ export class ProjectMasterService {
   }
 
   async update(id, data, loggedInUser) {
+    console.log("ProjectMasterService", data);
     try {
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return {
@@ -242,6 +282,7 @@ export class ProjectMasterService {
         "projectDescription",
         "manualEntry",
         "status",
+        "slug",
       ];
 
       for (const key of allowedFields) {
@@ -381,7 +422,7 @@ export class ProjectMasterService {
           status: STATUS.ACTIVE,
         },
         {
-          status: STATUS.INACTIVE,
+          status: STATUS.DELETED,
           updatedBy: loggedInUser.userName,
         },
         { new: true },
