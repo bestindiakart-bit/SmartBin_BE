@@ -351,6 +351,7 @@ export class ItemMasterService {
         {
           _id: id,
           customerId: loggedInUser.customerId,
+          status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
         },
         { status: STATUS.INACTIVE },
         { new: true },

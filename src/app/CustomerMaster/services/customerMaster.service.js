@@ -207,35 +207,87 @@ export class CustomerMasterService {
       };
     }
   }
-  async get(id) {
+  async get(id, query, loggedInUser) {
     try {
-      const filter = { status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] } };
-      if (id) filter._id = id;
+      const baseFilter = {
+        status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
+      };
 
-      const customers = await Customer.find(filter, {
-        adminPassword: 0,
-      })
-        .populate("customerType", "customerTypeName")
-        .lean();
+      // CASE 1: Get By ID
+      if (id) {
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          return {
+            success: false,
+            statusCode: StatusCodes.BAD_REQUEST,
+            data: { message: "Invalid ID" },
+          };
+        }
 
-      if (id && !customers.length) {
+        const customer = await Customer.findOne(
+          { ...baseFilter, _id: id },
+          { adminPassword: 0 },
+        )
+          .populate("customerType", "customerTypeName")
+          .lean();
+
+        if (!customer) {
+          return {
+            success: false,
+            statusCode: StatusCodes.NOT_FOUND,
+            data: { message: "Customer not found" },
+          };
+        }
+
         return {
-          success: false,
-          data: { message: "Customer not found" },
-          statusCode: StatusCodes.NOT_FOUND,
+          success: true,
+          statusCode: StatusCodes.OK,
+          data: customer,
         };
       }
+
+      // CASE 2: Paginated Get All
+      let { page = 1, limit = 10 } = query;
+
+      page = parseInt(page);
+      limit = parseInt(limit);
+
+      if (isNaN(page) || page < 1) page = 1;
+      if (isNaN(limit) || limit < 1) limit = 10;
+      if (limit > 100) limit = 100;
+
+      const skip = (page - 1) * limit;
+
+      const [customers, total] = await Promise.all([
+        Customer.find(baseFilter, { adminPassword: 0 })
+          .populate("customerType", "customerTypeName")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+
+        Customer.countDocuments(baseFilter),
+      ]);
+
+      const totalPages = Math.ceil(total / limit);
 
       return {
         success: true,
         statusCode: StatusCodes.OK,
-        data: id ? customers[0] : customers,
+        data: {
+          total,
+          totalPages,
+          currentPage: page,
+          limit,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+          records: customers,
+        },
       };
     } catch (error) {
       return {
         success: false,
-        data: { message: error.message },
         statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+        data: { message: error.message },
       };
     }
   }
@@ -420,7 +472,7 @@ export class CustomerMasterService {
   async delete(id, loggedInUser) {
     try {
       const customer = await Customer.findOneAndUpdate(
-        { _id: id, status: STATUS.ACTIVE },
+        { _id: id, status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] } },
         {
           status: STATUS.DELETED,
           updatedBy: loggedInUser.userName,

@@ -111,66 +111,57 @@ export class BinMasterService {
 
   async getAll(query, loggedInUser) {
     try {
-      const { id, page = 1, limit = 10 } = query;
+      let { page = 1, limit = 10 } = query;
+
+      page = parseInt(page);
+      limit = parseInt(limit);
+
+      if (isNaN(page) || page < 1) page = 1;
+      if (isNaN(limit) || limit < 1) limit = 10;
+      if (limit > 100) limit = 100; // safety cap
+
+      const skip = (page - 1) * limit;
 
       const filter = {
         status: STATUS.ACTIVE,
       };
 
-      // Case 1: Get By ID
-      if (id) {
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-          return {
-            success: false,
-            data: { message: "Invalid ID" },
-            statusCode: StatusCodes.BAD_REQUEST,
-          };
-        }
-
-        filter._id = id;
-
-        const bin = await BinMaster.findOne(filter).select("-__v").lean();
-
-        if (!bin) {
-          return {
-            success: false,
-            data: { message: "Bin not found" },
-            statusCode: StatusCodes.NOT_FOUND,
-          };
-        }
-
-        return {
-          success: true,
-          statusCode: StatusCodes.OK,
-          data: bin,
-        };
+      // Optional: Customer isolation (important for SmartBin multi-tenant)
+      if (loggedInUser?.customerId) {
+        filter.customerId = loggedInUser.customerId;
       }
 
-      // Case 2: Get All (Paginated)
-      const bins = await BinMaster.find(filter)
-        .select("-__v")
-        .skip((page - 1) * limit)
-        .limit(Number(limit))
-        .sort({ createdAt: -1 })
-        .lean();
+      const [records, total] = await Promise.all([
+        BinMaster.find(filter)
+          .select("-__v")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
 
-      const total = await BinMaster.countDocuments(filter);
+        BinMaster.countDocuments(filter),
+      ]);
+
+      const totalPages = Math.ceil(total / limit);
 
       return {
         success: true,
         statusCode: StatusCodes.OK,
         data: {
           total,
-          page: Number(page),
-          limit: Number(limit),
-          records: bins,
+          totalPages,
+          currentPage: page,
+          limit,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+          records,
         },
       };
-    } catch (err) {
+    } catch (error) {
       return {
         success: false,
-        data: { message: err.message },
         statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+        data: { message: error.message },
       };
     }
   }

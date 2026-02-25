@@ -16,10 +16,10 @@ export class ItemCategoryController {
 
   getAll = async (req, res, next) => {
     try {
-      const data = await this.service.getAll(req.query, req.user);
-      return res.status(data.statusCode).json(data);
-    } catch (err) {
-      return next(err);
+      const result = await this.service.getAll(req.query, req.user);
+      return res.status(result.statusCode).json(result);
+    } catch (error) {
+      return next(error);
     }
   };
 

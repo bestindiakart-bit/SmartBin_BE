@@ -62,23 +62,61 @@ export class ItemCategoryService {
 
   async getAll(query, loggedInUser) {
     try {
-      const categories = await ItemCategory.find({
+      if (!loggedInUser?.customerId) {
+        return {
+          success: false,
+          statusCode: StatusCodes.UNAUTHORIZED,
+          data: { message: "Customer not found in token" },
+        };
+      }
+
+      // 🔹 Pagination Handling
+      let { page = 1, limit = 10 } = query;
+
+      page = parseInt(page);
+      limit = parseInt(limit);
+
+      if (isNaN(page) || page < 1) page = 1;
+      if (isNaN(limit) || limit < 1) limit = 10;
+      if (limit > 100) limit = 100; // safety cap
+
+      const skip = (page - 1) * limit;
+
+      const filter = {
         customerId: loggedInUser.customerId,
         status: STATUS.ACTIVE,
-      })
-        .sort({ createdAt: -1 })
-        .lean();
+      };
+
+      const [categories, total] = await Promise.all([
+        ItemCategory.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+
+        ItemCategory.countDocuments(filter),
+      ]);
+
+      const totalPages = Math.ceil(total / limit);
 
       return {
         success: true,
         statusCode: StatusCodes.OK,
-        data: categories,
+        data: {
+          total,
+          totalPages,
+          currentPage: page,
+          limit,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+          records: categories,
+        },
       };
-    } catch (err) {
+    } catch (error) {
       return {
         success: false,
-        data: { message: err.message },
         statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+        data: { message: error.message },
       };
     }
   }
@@ -148,7 +186,7 @@ export class ItemCategoryService {
         {
           _id: id,
           customerId: loggedInUser.customerId,
-          status: STATUS.ACTIVE,
+          status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
         },
         {
           status: STATUS.DELETED,

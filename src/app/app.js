@@ -24,6 +24,7 @@ import { wareHouseRouter } from "./Warehouse/routes/warehouse.route.js";
 import { binMasterRouter } from "./Bin/routes/binConfiguration.route.js";
 import { customerTypeRouter } from "./CustomerMaster/routes/customerType.route.js";
 import { exportRouter } from "./export/export.route.js";
+import binDashboardRouter from "./Bin/routes/binDashboard.route.js";
 
 const { urlencoded, json } = bodyParser;
 
@@ -57,6 +58,7 @@ export function init(app) {
   app.use(`${BASE_URL}/bin`, binMasterRouter);
   app.use(`${BASE_URL}/customer-type`, customerTypeRouter);
   app.use(`${BASE_URL}/export`, exportRouter);
+  app.use(`${BASE_URL}/bin-dashboard`, binDashboardRouter);
 
   // Static files
   app.use("/storage", express.static(path.join(__dirname, "storage")));
@@ -69,7 +71,7 @@ export function init(app) {
     if (req.path === `${BASE_URL}/test`) {
       return res.status(StatusCodes.OK).json({
         message:
-          "API is working correctly! Latest update on 25/02/2026 at 09:30 AM by Ajin",
+          "API is working correctly! Latest update on 25/02/2026 at 03:27 PM by Abdur Rahim",
       });
     }
 

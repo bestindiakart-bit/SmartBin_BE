@@ -154,7 +154,7 @@ export class CustomerTypeService {
   async delete(id, loggedInUser) {
     try {
       const deleted = await CustomerType.findOneAndUpdate(
-        { _id: id },
+        { _id: id, status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] } },
         {
           status: STATUS.DELETED,
           updatedBy: loggedInUser.userName,

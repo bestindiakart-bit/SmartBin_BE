@@ -189,7 +189,7 @@ export class userTypeService {
       }
 
       const deleted = await UserType.findOneAndUpdate(
-        { _id: id, status: STATUS.ACTIVE },
+        { _id: id, status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] } },
         {
           status: STATUS.DELETED,
           updatedBy: loggedInUser.userName,
