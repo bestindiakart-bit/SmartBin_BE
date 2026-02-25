@@ -7,7 +7,6 @@ import mongoose from "mongoose";
 
 export class userTypeService {
   async create(data, loggedInUser) {
-    console.log(loggedInUser);
     try {
       const name = data.userTypeName?.trim().toUpperCase();
 

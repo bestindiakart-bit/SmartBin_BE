@@ -11,7 +11,6 @@ import {
  * @param data any
  */
 export function getJwtToken(data) {
-  console.log(data);
   return {
     accessToken: getAccessToken(data),
     refreshToken: getRefreshToken(data),

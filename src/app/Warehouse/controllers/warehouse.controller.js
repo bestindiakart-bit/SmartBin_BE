@@ -9,6 +9,9 @@ export class WarehouseController extends ResponseHandler {
   }
 
   create = async (req, res, next) => {
+    console.log("Request body:", req.body);
+    console.log("Logged in user:", req.user);
+    
     try {
       const data = await this.service.create(req.body, req.user);
       return res.status(data.statusCode).json(data);
@@ -36,7 +39,6 @@ export class WarehouseController extends ResponseHandler {
   };
 
   getCustomerWarehouses = async (req, res, next) => {
-    console.log(req.query);
     try {
       const data = await this.service.getCustomerWarehouses(
         req.query,

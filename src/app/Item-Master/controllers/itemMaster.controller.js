@@ -9,6 +9,7 @@ export class ItemMasterController extends ResponseHandler {
   }
 
   create = async (req, res, next) => {
+    
     try {
       const itemImages = req.files?.length
         ? await Promise.all(req.files.map((file) => getStoragePath(file)))

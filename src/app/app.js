@@ -69,7 +69,7 @@ export function init(app) {
     if (req.path === `${BASE_URL}/test`) {
       return res.status(StatusCodes.OK).json({
         message:
-          "API is working correctly! Latest update on 24/02/2026 at 09:30 AM by Abdur Rahim",
+          "API is working correctly! Latest update on 25/02/2026 at 09:30 AM by Ajin",
       });
     }
 

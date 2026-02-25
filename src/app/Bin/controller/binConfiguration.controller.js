@@ -35,7 +35,6 @@ export class BinMasterController extends ResponseHandler {
   };
 
   update = async (req, res, next) => {
-    console.log(req.body);
     try {
       const data = await this.service.update(req.params.id, req.body, req.user);
       return res.status(data.statusCode).json(data);

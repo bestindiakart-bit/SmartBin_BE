@@ -7,8 +7,6 @@ import { logActivity } from "../../../utils/activity.util.js";
 
 export class ProjectMasterService {
   async create(data, loggedInUser) {
-    console.log("ProjectMasterService", data);
-    console.log("loggedInUser", loggedInUser);
     try {
       const {
         projectName,
@@ -19,8 +17,6 @@ export class ProjectMasterService {
         projectDescription,
         slug,
       } = data;
-
-      console.log(projectHead, projectManager);
 
       if (
         !projectName ||

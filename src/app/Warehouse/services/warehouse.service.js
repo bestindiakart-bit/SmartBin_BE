@@ -7,6 +7,8 @@ import { logActivity } from "../../../utils/activity.util.js";
 
 export class WarehouseService {
   async create(data, loggedInUser) {
+    console.log("data===>",data);
+    
     try {
       const {
         warehouseName,
