@@ -176,7 +176,6 @@ export class BinMasterService {
   }
 
   async update(id, data, loggedInUser) {
-    console.log("data", data);
     try {
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return {

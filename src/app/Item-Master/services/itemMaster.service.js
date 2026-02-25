@@ -8,6 +8,8 @@ import fs from "fs";
 
 export class ItemMasterService {
   async create(data, loggedInUser) {
+    console.log("data-->",data);
+    
     try {
       const {
         itemName,
@@ -201,14 +203,11 @@ export class ItemMasterService {
         };
       }
 
-      console.log(id);
 
       const item = await ItemMaster.findOne({
         _id: id,
         customerId: loggedInUser.customerId,
       }).lean();
-
-      console.log(item);
 
       if (!item) {
         return {

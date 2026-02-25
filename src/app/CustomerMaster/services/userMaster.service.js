@@ -12,7 +12,6 @@ import { buildPermissionsFromRequest } from "../../../utils/permission.util.js";
 
 export class UserMasterService {
   async create(data, loggedInUser) {
-    console.log(data);
     try {
       const {
         userName,
@@ -325,7 +324,6 @@ export class UserMasterService {
   }
 
   async delete(id, loggedInUser) {
-    console.log(id);
     try {
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return {
@@ -481,8 +479,6 @@ export class UserMasterService {
         loginEmail: email,
         status: STATUS.ACTIVE,
       }).populate("userTypeId");
-
-      console.log(user);
 
       if (!user) {
         return {

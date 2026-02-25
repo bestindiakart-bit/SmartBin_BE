@@ -10,7 +10,6 @@ export class ExportController extends ResponseHandler {
   }
 
   exportData = async (req, res, next) => {
-    console.log(req.params, req.query);
     try {
       const { module } = req.params;
       const { format, ...filters } = req.query;

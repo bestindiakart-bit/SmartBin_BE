@@ -52,7 +52,6 @@ export class CustomerMasterService {
   }
 
   async create(data, loggedInUser) {
-    console.log("req.body", data);
     try {
       // Basic Validation
       const error = this.validate(data);

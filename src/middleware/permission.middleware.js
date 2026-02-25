@@ -3,8 +3,6 @@ import { STATUS } from "../constants/status.js";
 
 export const authorize = (moduleName, action) => {
   return async (req, res, next) => {
-    console.log("authorize", req.decodedToken.data);
-    console.log(moduleName, action);
     try {
       const userId = req.decodedToken.data._id;
 
