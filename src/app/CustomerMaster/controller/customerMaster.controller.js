@@ -20,8 +20,8 @@ export class CustomerMasterController extends ResponseHandler {
 
   get = async (req, res, next) => {
     try {
-      const data = await this.service.get(req.params.id);
-      return res.status(data.statusCode).json(data);
+      const result = await this.service.get(req.params.id, req.query, req.user);
+      return res.status(result.statusCode).json(result);
     } catch (error) {
       return next(error);
     }

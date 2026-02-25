@@ -2,7 +2,7 @@ import { ProjectMasterService } from "../services/projectMaster.service.js";
 import { ResponseHandler } from "../../../utils/response_handler.js";
 
 export class ProjectMasterController extends ResponseHandler {
-  service = null;
+  service;
   constructor() {
     super();
     this.service = new ProjectMasterService();
@@ -19,8 +19,13 @@ export class ProjectMasterController extends ResponseHandler {
 
   get = async (req, res, next) => {
     try {
-      const data = await this.service.get(req.params.id, req.user);
-      return res.status(data.statusCode).json(data);
+      const result = await this.service.get(
+        req.params.id, // projectId (optional)
+        req.query, // page, limit
+        req.user, // loggedInUser
+      );
+
+      return res.status(result.statusCode).json(result);
     } catch (error) {
       return next(error);
     }

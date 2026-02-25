@@ -46,6 +46,7 @@ export class UserMasterController extends ResponseHandler {
   };
 
   login = async (req, res, next) => {
+    console.log(req.body);
     try {
       const data = await this.service.login(req.body);
 
@@ -96,6 +97,7 @@ export class UserMasterController extends ResponseHandler {
   };
 
   forgotPassword = async (req, res, next) => {
+    console.log(req.body);
     try {
       const data = await this.service.forgotPassword(req.body);
       return res.status(data.statusCode).json(data);

@@ -2,7 +2,7 @@ import { WarehouseService } from "../services/warehouse.service.js";
 import { ResponseHandler } from "../../../utils/response_handler.js";
 
 export class WarehouseController extends ResponseHandler {
-  service = null;
+  service;
   constructor() {
     super();
     this.service = new WarehouseService();
@@ -47,6 +47,31 @@ export class WarehouseController extends ResponseHandler {
       return res.status(data.statusCode).json(data);
     } catch (err) {
       return next(err);
+    }
+  };
+
+  deleteItem = async (req, res, next) => {
+    try {
+      const result = await this.service.deleteItem(
+        req.params.id,
+        req.params.itemMasterId,
+        req.user,
+      );
+      return res.status(result.statusCode).json(result);
+    } catch (error) {
+      return next(error);
+    }
+  };
+
+  deleteWarehouse = async (req, res, next) => {
+    try {
+      const result = await this.service.deleteWarehouse(
+        req.params.id,
+        req.user,
+      );
+      return res.status(result.statusCode).json(result);
+    } catch (error) {
+      return next(error);
     }
   };
 }

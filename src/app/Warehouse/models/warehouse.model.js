@@ -1,82 +1,82 @@
 import mongoose from "mongoose";
 import { STATUS } from "../../../constants/status.js";
 
-const warehouseSchema = new mongoose.Schema(
-  {
-    customerId: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
-      index: true,
-    },
+const PAYMENT_STATUS = {
+  PENDING: 1,
+  PAID: 2,
+};
 
-    customerName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    warehouseId: {
-      type: String,
-      required: true,
-      unique: true,
-      index: true,
-    },
-
-    warehouseName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    warehouseLocation: {
-      type: String,
-      trim: true,
-    },
-
-    warehouseMaxLimit: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    safetyStock: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    reorderRequired: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    supplierName: {
-      type: String,
-      trim: true,
-    },
-
-    lastTransactionQuantity: {
-      type: Number,
-      default: 0,
-    },
-
-    lastTransactionDate: {
-      type: Date,
-    },
-
-    status: {
-      type: Number,
-      enum: Object.values(STATUS),
-      default: STATUS.ACTIVE,
-      index: true,
-    },
-
-    createdBy: String,
-    updatedBy: String,
+const warehouseSchema = new mongoose.Schema({
+  customerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+    index: true,
   },
-  { timestamps: true },
-);
+
+  customerName: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+
+  warehouseId: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true,
+  },
+
+  warehouseName: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+
+  warehouseLocation: {
+    type: String,
+    trim: true,
+  },
+
+  // NEW: Items inside warehouse
+  items: [
+    {
+      _id: false,
+      itemMasterId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "ItemMaster",
+        required: true,
+      },
+
+      warehouseLimit: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+
+      warehouseReorderLevel: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+
+      warehouseSafeStock: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+    },
+  ],
+
+  status: {
+    type: Number,
+    enum: Object.values(STATUS),
+    default: STATUS.ACTIVE,
+    index: true,
+  },
+
+  createdBy: String,
+  updatedBy: String,
+});
 
 // Prevent duplicate warehouse name per customer
 warehouseSchema.index(

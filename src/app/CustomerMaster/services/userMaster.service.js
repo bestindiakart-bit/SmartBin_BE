@@ -337,7 +337,7 @@ export class UserMasterService {
         {
           _id: id,
           customerId: loggedInUser.customerId,
-          status: STATUS.ACTIVE,
+          status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
         },
         {
           status: STATUS.DELETED,
@@ -370,6 +370,7 @@ export class UserMasterService {
 
   async login(data) {
     try {
+      console.log(data);
       const { loginEmail, loginPassword } = data;
 
       if (!loginEmail || !loginPassword) {

@@ -7,6 +7,10 @@ import { logActivity } from "../../../utils/activity.util.js";
 
 export class ProjectMasterService {
   async create(data, loggedInUser) {
+<<<<<<< HEAD
+=======
+    console.log("ProjectMasterService", data);
+>>>>>>> 941037d (Warehouse Created)
     try {
       const {
         projectName,
@@ -151,20 +155,19 @@ export class ProjectMasterService {
     }
   }
 
-  async get(query, loggedInUser) {
+  async get(id, query, loggedInUser) {
     try {
-      // const page = Number(query.page) || 1;
-      // const limit = Number(query.limit) || 10;
-      // const skip = (page - 1) * limit;
+      const page = Number(query.page) || 1;
+      const limit = Number(query.limit) || 10;
+      const skip = (page - 1) * limit;
 
       const baseFilter = {
         customerId: new mongoose.Types.ObjectId(loggedInUser.customerId),
         status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
       };
 
-      // If projectId provided → return single project
-      if (query) {
-        if (!mongoose.Types.ObjectId.isValid(query)) {
+      if (id) {
+        if (!mongoose.Types.ObjectId.isValid(id)) {
           return {
             success: false,
             data: { message: "Invalid project ID" },
@@ -174,7 +177,7 @@ export class ProjectMasterService {
 
         const project = await Project.findOne({
           ...baseFilter,
-          _id: new mongoose.Types.ObjectId(query),
+          _id: new mongoose.Types.ObjectId(id),
         })
           .populate("customerId", "customerName")
           .lean();
@@ -194,16 +197,15 @@ export class ProjectMasterService {
         };
       }
 
-      // Otherwise return paginated list
-      const filter = baseFilter;
-
       const [projects, total] = await Promise.all([
-        Project.find(filter)
+        Project.find(baseFilter)
           .populate("customerId", "customerName")
           .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
           .lean(),
 
-        Project.countDocuments(filter),
+        Project.countDocuments(baseFilter),
       ]);
 
       return {
@@ -211,6 +213,9 @@ export class ProjectMasterService {
         statusCode: StatusCodes.OK,
         data: {
           total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
           projects,
         },
       };
@@ -415,7 +420,7 @@ export class ProjectMasterService {
         {
           _id: id,
           customerId: loggedInUser.customerId,
-          status: STATUS.ACTIVE,
+          status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
         },
         {
           status: STATUS.DELETED,

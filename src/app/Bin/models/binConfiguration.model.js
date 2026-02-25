@@ -13,11 +13,6 @@ const binMasterSchema = new mongoose.Schema(
       required: true,
     },
 
-    projectId: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
-    },
-
     projectName: {
       type: String,
       required: true,
@@ -86,6 +81,11 @@ const binMasterSchema = new mongoose.Schema(
       enum: Object.values(STATUS),
       default: STATUS.ACTIVE,
       index: true,
+    },
+
+    isWarehouseCreated: {
+      type: Boolean,
+      default: false,
     },
 
     createdBy: String,

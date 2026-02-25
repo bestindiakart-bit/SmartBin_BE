@@ -33,3 +33,17 @@ wareHouseRouter.get(
   authorize("warehouse_creation", "view"),
   warehouseController.getCustomerWarehouses,
 );
+
+wareHouseRouter.delete(
+  "/:id/item/:itemMasterId",
+  authenticate(),
+  authorize("warehouse_creation", "delete"),
+  warehouseController.deleteItem,
+);
+
+wareHouseRouter.delete(
+  "/warehouse/:id",
+  authenticate(),
+  authorize("warehouse_creation", "delete"),
+  warehouseController.deleteWarehouse,
+);
