@@ -1,6 +1,6 @@
 {
   "UserType": {
-    "userTypeName": "MASTER_ADMIN"
+    "userTypeName": "SUPER ADMIN"
   },
   "customer": {
     "customerId": "SBCUSTOMER-001",
@@ -8,12 +8,16 @@
     "customerName": "SmartBin Admin",
     "transitDays": 5,
     "isMainAdmin": true,
+    "position": "CEO",
+    "department": "Management",
+    "mobileNumber": "9876543210",
     "gstNumber": "GSTDEMO123",
     "adminEmail": "bestindiakart@gmail.com",
     "adminPassword": "smartbin@!&^%2025",
     "shippingAddress1": "Chennai",
     "shippingAddress2": "Tamil Nadu",
     "billingAddress": "Chennai Billing",
+    "owner": true,
     "geoLocation": {
       "type": "Point",
       "coordinates": [80.2707, 13.0827]

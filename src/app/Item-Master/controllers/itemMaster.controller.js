@@ -8,16 +8,41 @@ export class ItemMasterController extends ResponseHandler {
     this.service = new ItemMasterService();
   }
 
+  // create = async (req, res, next) => {
+
+  //   try {
+  //     const itemImages = req.files?.length
+  //       ? await Promise.all(req.files.map((file) => getStoragePath(file)))
+  //       : [];
+
+  //     const payload = {
+  //       ...req.body,
+  //       itemImages,
+  //     };
+
+  //     const data = await this.service.create(payload, req.user);
+
+  //     return res.status(data.statusCode).json(data);
+  //   } catch (error) {
+  //     return next(error);
+  //   }
+  // };
   create = async (req, res, next) => {
-    
     try {
-      const itemImages = req.files?.length
-        ? await Promise.all(req.files.map((file) => getStoragePath(file)))
+      const itemImages = req.files?.itemImages?.length
+        ? await Promise.all(
+            req.files.itemImages.map((file) => getStoragePath(file)),
+          )
         : [];
+
+      const itemDrawing = req.files?.itemDrawing?.[0]
+        ? await getStoragePath(req.files.itemDrawing[0])
+        : null;
 
       const payload = {
         ...req.body,
         itemImages,
+        itemDrawing,
       };
 
       const data = await this.service.create(payload, req.user);
@@ -48,18 +73,28 @@ export class ItemMasterController extends ResponseHandler {
 
   update = async (req, res, next) => {
     try {
-      // Process uploaded images
-      const itemImages = req.files?.length
-        ? await Promise.all(req.files.map(getStoragePath))
-        : undefined; // undefined means no image update
+      // Process images
+      const itemImages = req.files?.itemImages?.length
+        ? await Promise.all(
+            req.files.itemImages.map((file) => getStoragePath(file)),
+          )
+        : undefined;
+
+      // Process drawing (PDF)
+      const itemDrawing = req.files?.itemDrawing?.length
+        ? await getStoragePath(req.files.itemDrawing[0])
+        : undefined;
 
       const payload = {
         ...req.body,
       };
 
-      // Only attach images if uploaded
       if (itemImages) {
         payload.itemImages = itemImages;
+      }
+
+      if (itemDrawing) {
+        payload.itemDrawing = itemDrawing;
       }
 
       const data = await this.service.update(req.params.id, payload, req.user);

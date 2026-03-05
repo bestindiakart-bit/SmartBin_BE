@@ -45,8 +45,18 @@ export class UserMasterController extends ResponseHandler {
     }
   };
 
+  getByCustomer = async (req, res, next) => {
+    
+    try {
+      const { customerId } = req.params;
+      const result = await this.service.getByCustomer(customerId, req.user);
+      return res.status(result.statusCode).json(result);
+    } catch (error) {
+      return next(error);
+    }
+  };
+
   login = async (req, res, next) => {
-    console.log(req.body);
     try {
       const data = await this.service.login(req.body);
 

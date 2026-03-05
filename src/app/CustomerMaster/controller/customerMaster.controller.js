@@ -27,6 +27,15 @@ export class CustomerMasterController extends ResponseHandler {
     }
   };
 
+  getAll = async (req, res, next) => {
+    try {
+      const result = await this.service.getAll(req.user);
+      return res.status(result.statusCode).json(result);
+    } catch (error) {
+      return next(error);
+    }
+  };
+
   update = async (req, res, next) => {
     try {
       const data = await this.service.update(req.params.id, req.body, req.user);

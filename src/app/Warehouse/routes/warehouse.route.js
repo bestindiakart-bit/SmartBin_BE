@@ -27,23 +27,24 @@ wareHouseRouter
     warehouseController.update,
   );
 
-wareHouseRouter.get(
-  "/customer",
-  authenticate(),
-  authorize("warehouse_creation", "view"),
-  warehouseController.getCustomerWarehouses,
-);
-
-wareHouseRouter.delete(
-  "/:id/item/:itemMasterId",
-  authenticate(),
-  authorize("warehouse_creation", "delete"),
-  warehouseController.deleteItem,
-);
-
 wareHouseRouter.delete(
   "/warehouse/:id",
   authenticate(),
   authorize("warehouse_creation", "delete"),
   warehouseController.deleteWarehouse,
 );
+
+wareHouseRouter.get(
+  "/by-item",
+  authenticate(),
+  authorize("warehouse_creation", "view"),
+  warehouseController.warehouseByItem,
+);
+
+wareHouseRouter.get(
+  "/transation",
+  authenticate(),
+  authorize("warehouse_creation", "view"),
+  warehouseController.warehouseTransactionByItem,
+);
+

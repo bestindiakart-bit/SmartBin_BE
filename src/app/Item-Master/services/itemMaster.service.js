@@ -8,9 +8,16 @@ import fs from "fs";
 
 export class ItemMasterService {
   async create(data, loggedInUser) {
-    console.log("data-->",data);
-    
     try {
+      // -------- 0. Owner check --------
+      if (!loggedInUser.owner) {
+        return {
+          success: false,
+          data: { message: "Only owner users can create items" },
+          statusCode: 403,
+        };
+      }
+
       const {
         itemName,
         itemCategory,
@@ -21,37 +28,39 @@ export class ItemMasterService {
         remarks,
         manufacturingTime,
         itemSBQ,
-        price,
+        outerBoxQuantity,
         itemHSNCode,
         warehouseStock,
         warehouseSafetyStock,
+        warehouseROL,
         warehouseStockUrl,
         isLocal,
         status,
         itemImages,
+        itemDrawing,
       } = data;
 
-      // Required Validation
+      // -------- 1. Required Validation --------
       if (!itemName?.trim()) {
         return {
           success: false,
           data: { message: "Item name required" },
-          statusCode: StatusCodes.BAD_REQUEST,
+          statusCode: 400,
         };
       }
 
-      // Validate itemCategory ObjectId
+      // -------- 2. Validate itemCategory ObjectId --------
       if (itemCategory && !mongoose.Types.ObjectId.isValid(itemCategory)) {
         return {
           success: false,
           data: { message: "Invalid item category ID" },
-          statusCode: StatusCodes.BAD_REQUEST,
+          statusCode: 400,
         };
       }
 
-      // Unique Check (customer + itemName)
+      // -------- 3. Unique Check (customer + itemName) --------
       const exists = await ItemMaster.exists({
-        customerId: loggedInUser.customerId,
+        customerId: loggedInUser.customerId, // always from login user
         itemName: itemName.trim(),
       });
 
@@ -59,29 +68,27 @@ export class ItemMasterService {
         return {
           success: false,
           data: { message: "Item already exists" },
-          statusCode: StatusCodes.CONFLICT,
+          statusCode: 409,
         };
       }
 
-      // Generate Item ID
+      // -------- 4. Generate Item ID --------
       const lastItem = await ItemMaster.findOne(
-        {},
+        { customerId: loggedInUser.customerId }, // ensure it's per customer
         { itemId: 1 },
         { sort: { createdAt: -1 } },
       ).lean();
 
       let nextNumber = 1;
-
       if (lastItem?.itemId) {
         const lastNum = parseInt(lastItem.itemId.split("-")[1], 10);
         nextNumber = isNaN(lastNum) ? 1 : lastNum + 1;
       }
-
       const itemId = `SBITEM-${String(nextNumber).padStart(3, "0")}`;
 
-      // Create Item
+      // -------- 5. Create Item --------
       const item = await ItemMaster.create({
-        customerId: loggedInUser.customerId,
+        customerId: loggedInUser.customerId, // owner customer
         itemId,
         itemName: itemName.trim(),
         itemCategory,
@@ -94,20 +101,22 @@ export class ItemMasterService {
           ? Number(manufacturingTime)
           : undefined,
         itemSBQ: itemSBQ ? Number(itemSBQ) : undefined,
-        price: price ? Number(price) : undefined,
+        outerBoxQuantity: outerBoxQuantity ? Number(outerBoxQuantity) : 0,
         itemHSNCode: itemHSNCode?.trim(),
         warehouseStock: warehouseStock ? Number(warehouseStock) : 0,
         warehouseSafetyStock: warehouseSafetyStock
           ? Number(warehouseSafetyStock)
           : 0,
+        warehouseROL: warehouseROL ? Number(warehouseROL) : 0,
         warehouseStockUrl: warehouseStockUrl?.trim(),
         isLocal: isLocal === true || isLocal === "true",
         status: status ?? STATUS.ACTIVE,
         itemImages: Array.isArray(itemImages) ? itemImages : [],
+        itemDrawing: itemDrawing || null,
         createdBy: loggedInUser.userName,
       });
 
-      // Log Activity
+      // -------- 6. Log Activity --------
       await logActivity({
         userId: loggedInUser._id,
         entityType: "ItemMaster",
@@ -116,9 +125,10 @@ export class ItemMasterService {
         description: `${loggedInUser.userName} created item ${item.itemId}`,
       });
 
+      // -------- 7. Return --------
       return {
         success: true,
-        statusCode: StatusCodes.CREATED,
+        statusCode: 201,
         data: {
           _id: item._id,
           itemId: item.itemId,
@@ -129,7 +139,7 @@ export class ItemMasterService {
       return {
         success: false,
         data: { message: err.message },
-        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+        statusCode: 500,
       };
     }
   }
@@ -146,7 +156,7 @@ export class ItemMasterService {
       if (status !== undefined) {
         filter.status = Number(status);
       } else {
-        filter.status = STATUS.ACTIVE;
+        filter.status = { $in: [STATUS.ACTIVE, STATUS.INACTIVE] }; // default to show active and inactive
       }
 
       // Search filter
@@ -203,7 +213,6 @@ export class ItemMasterService {
         };
       }
 
-
       const item = await ItemMaster.findOne({
         _id: id,
         customerId: loggedInUser.customerId,
@@ -246,7 +255,7 @@ export class ItemMasterService {
       const existingItem = await ItemMaster.findOne({
         _id: id,
         customerId: loggedInUser.customerId,
-        status: { $ne: STATUS.INACTIVE },
+        // status: { $ne: STATUS.INACTIVE STATUS.},
       });
 
       if (!existingItem) {
@@ -314,6 +323,11 @@ export class ItemMasterService {
         updateData.itemImages = [
           ...new Set([...(existingItem.itemImages || []), ...data.itemImages]),
         ];
+      }
+
+      // Handle Drawing (Replace Old If New Uploaded)
+      if (data.itemDrawing) {
+        updateData.itemDrawing = data.itemDrawing;
       }
 
       // Update Document

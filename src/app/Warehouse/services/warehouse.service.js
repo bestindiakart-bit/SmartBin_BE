@@ -5,23 +5,82 @@ import { User } from "../../CustomerMaster/models/userMaster.model.js";
 import { STATUS } from "../../../constants/status.js";
 import { logActivity } from "../../../utils/activity.util.js";
 import { ItemMaster } from "../../Item-Master/models/itemMaster.model.js";
+import { Customer } from "../../CustomerMaster/models/customerMaster.model.js";
+import { WarehouseTransaction } from "../models/warehousetransation.model.js";
 
 export class WarehouseService {
-  async create(data, loggedInUser) {
-<<<<<<< HEAD
-    console.log("data===>",data);
-    
-=======
-    console.log("data", data);
->>>>>>> 941037d (Warehouse Created)
-    try {
-      const { warehouseName, warehouseLocation, items = [] } = data;
+  async generateWarehouseId(customerId) {
+    const lastWarehouse = await Warehouse.findOne(
+      {
+        customerId,
+        warehouseId: { $regex: /^SBWAREHOUSE-\d+$/ },
+      },
+      { warehouseId: 1 },
+    )
+      .sort({ createdAt: -1 }) // safer than sorting string
+      .lean();
 
-      if (!warehouseName?.trim()) {
+    let nextNumber = 1;
+
+    if (lastWarehouse?.warehouseId) {
+      const currentNumber = parseInt(
+        lastWarehouse.warehouseId.split("-")[1],
+        10,
+      );
+
+      if (!isNaN(currentNumber)) {
+        nextNumber = currentNumber + 1;
+      }
+    }
+
+    return `SBWAREHOUSE-${String(nextNumber).padStart(3, "0")}`;
+  }
+
+  /* ============================================================
+     Create Warehouse
+  ============================================================ */
+  async create(data, loggedInUser) {
+    try {
+      /* -------- 0. Owner check -------- */
+      if (!loggedInUser.owner) {
         return {
           success: false,
-          data: { message: "Warehouse name is required" },
-          statusCode: StatusCodes.BAD_REQUEST,
+          data: { message: "Only owner users can create a warehouse" },
+          statusCode: 403,
+        };
+      }
+
+      /* -------- 1. Validate Customer (Optional override) -------- */
+      if (data.customerId !== undefined) {
+        if (!mongoose.Types.ObjectId.isValid(data.customerId)) {
+          return {
+            success: false,
+            data: { message: "Invalid customer ID" },
+            statusCode: 400,
+          };
+        }
+
+        const customerExists = await Customer.exists({
+          _id: data.customerId,
+        });
+
+        if (!customerExists) {
+          return {
+            success: false,
+            data: { message: "Customer not found" },
+            statusCode: 404,
+          };
+        }
+      }
+
+      const { warehouseName, warehouseLocation, items } = data;
+
+      /* -------- 2. Required validation -------- */
+      if (!warehouseName || !warehouseName.trim()) {
+        return {
+          success: false,
+          data: { message: "Warehouse name required" },
+          statusCode: 400,
         };
       }
 
@@ -29,97 +88,90 @@ export class WarehouseService {
         return {
           success: false,
           data: { message: "At least one item is required" },
-          statusCode: StatusCodes.BAD_REQUEST,
+          statusCode: 400,
         };
       }
 
-      /* ----------------------------
-       2. Check duplicate itemMasterId in request
-    ----------------------------- */
-      const itemIds = items.map((i) => i.itemMasterId.toString());
-      const uniqueItemIds = new Set(itemIds);
+      /* -------- 3. Generate Warehouse ID -------- */
+      const warehouseId = await this.generateWarehouseId(data.customerId);
 
-      if (uniqueItemIds.size !== itemIds.length) {
-        return {
-          success: false,
-          data: { message: "Duplicate itemMasterId in request" },
-          statusCode: StatusCodes.BAD_REQUEST,
-        };
-      }
+      /* -------- 4. Validate Items -------- */
+      const itemIds = [];
 
-      /* ----------------------------
-       3. Validate each item input
-    ----------------------------- */
       for (const item of items) {
         if (!item.itemMasterId) {
           return {
             success: false,
-            data: { message: "itemMasterId is required for all items" },
-            statusCode: StatusCodes.BAD_REQUEST,
-          };
-        }
-
-        if (item.warehouseLimit == null || item.warehouseLimit < 0) {
-          return {
-            success: false,
-            data: { message: "Valid warehouseLimit required" },
-            statusCode: StatusCodes.BAD_REQUEST,
+            data: { message: "itemMasterId is required" },
+            statusCode: 400,
           };
         }
 
         if (
+          item.warehouseLimit == null ||
           item.warehouseReorderLevel == null ||
-          item.warehouseReorderLevel < 0
+          item.warehouseSafeStock == null ||
+          item.currentStock == null
         ) {
           return {
             success: false,
-            data: { message: "Valid warehouseReorderLevel required" },
-            statusCode: StatusCodes.BAD_REQUEST,
+            data: {
+              message:
+                "warehouseLimit, warehouseReorderLevel, warehouseSafeStock and currentStock are required",
+            },
+            statusCode: 400,
+          };
+        }
+
+        if (
+          item.warehouseLimit < 0 ||
+          item.warehouseReorderLevel < 0 ||
+          item.warehouseSafeStock < 0 ||
+          item.currentStock < 0
+        ) {
+          return {
+            success: false,
+            data: { message: "Stock values cannot be negative" },
+            statusCode: 400,
+          };
+        }
+
+        if (item.currentStock > item.warehouseLimit) {
+          return {
+            success: false,
+            data: {
+              message: "Current stock cannot exceed warehouse limit",
+            },
+            statusCode: 400,
+          };
+        }
+
+        if (itemIds.includes(item.itemMasterId.toString())) {
+          return {
+            success: false,
+            data: { message: "Duplicate item in request" },
+            statusCode: 400,
+          };
+        }
+
+        itemIds.push(item.itemMasterId.toString());
+
+        const exists = await ItemMaster.exists({
+          _id: item.itemMasterId,
+        });
+
+        if (!exists) {
+          return {
+            success: false,
+            data: { message: `Item not found: ${item.itemMasterId}` },
+            statusCode: 404,
           };
         }
       }
 
-      /* ----------------------------
-       4. Fetch Items From DB
-    ----------------------------- */
-      const dbItems = await ItemMaster.find({
-        _id: { $in: itemIds },
-        customerId: loggedInUser.customerId,
-        status: STATUS.ACTIVE,
-      }).select("_id status");
-
-      if (dbItems.length !== items.length) {
-        return {
-          success: false,
-          data: { message: "One or more items are invalid or inactive" },
-          statusCode: StatusCodes.BAD_REQUEST,
-        };
-      }
-
-      /* ----------------------------
-       5. Generate Warehouse ID (safer way)
-    ----------------------------- */
-
-      const lastWarehouse = await Warehouse.findOne()
-        .sort({ createdAt: -1 })
-        .select("warehouseId")
-        .lean();
-
-      let nextNumber = 1;
-
-      if (lastWarehouse?.warehouseId) {
-        const lastNum = parseInt(lastWarehouse.warehouseId.split("-")[1], 10);
-        nextNumber = isNaN(lastNum) ? 1 : lastNum + 1;
-      }
-
-      const warehouseId = `SBWAREHOUSE-${String(nextNumber).padStart(3, "0")}`;
-
-      /* ----------------------------
-       6. Create Warehouse
-    ----------------------------- */
+      /* -------- 5. Create Warehouse -------- */
       const warehouse = await Warehouse.create({
-        customerId: loggedInUser.customerId,
-        customerName: loggedInUser.userName,
+        customerId: data.customerId,
         warehouseId,
         warehouseName: warehouseName.trim(),
         warehouseLocation: warehouseLocation?.trim(),
@@ -128,13 +180,20 @@ export class WarehouseService {
           warehouseLimit: Number(item.warehouseLimit),
           warehouseReorderLevel: Number(item.warehouseReorderLevel),
           warehouseSafeStock: Number(item.warehouseSafeStock),
+          currentStock: Number(item.currentStock), // ✅ NEW FIELD
+          supplerName: item.supplerName?.trim(),
+          lastTransationQuantity:
+            item.lastTransationQuantity != null
+              ? Number(item.lastTransationQuantity)
+              : null,
+          lastTransactionDate: item.lastTransactionDate
+            ? new Date(item.lastTransactionDate)
+            : null,
         })),
         createdBy: loggedInUser.userName,
       });
 
-      /* ----------------------------
-       7. Log Activity
-    ----------------------------- */
+      /* -------- 6. Log Activity -------- */
       await logActivity({
         userId: loggedInUser._id,
         entityType: "Warehouse",
@@ -143,20 +202,17 @@ export class WarehouseService {
         description: `${loggedInUser.userName} created warehouse ${warehouse.warehouseName}`,
       });
 
+      /* -------- 7. Success -------- */
       return {
         success: true,
-        statusCode: StatusCodes.CREATED,
-        data: {
-          _id: warehouse._id,
-          warehouseId: warehouse.warehouseId,
-          warehouseName: warehouse.warehouseName,
-        },
+        statusCode: 201,
+        data: warehouse,
       };
     } catch (err) {
       return {
         success: false,
         data: { message: err.message },
-        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+        statusCode: 500,
       };
     }
   }
@@ -164,24 +220,35 @@ export class WarehouseService {
   async getAll(query, loggedInUser) {
     try {
       const filter = {
-        customerId: loggedInUser.customerId,
-        status: STATUS.ACTIVE,
+        status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
       };
 
       if (query.id) {
         filter._id = query.id;
       }
 
+      if (!loggedInUser.owner) {
+        filter.customerId = loggedInUser.customerId._id;
+      }
+
       const warehouses = await Warehouse.find(filter)
+        .populate({
+          path: "customerId",
+          select: "customerName companyName customerId",
+        })
+        .populate({
+          path: "items.itemMasterId",
+          select: "itemName partNumber itemDescription",
+        })
+
         .sort({ createdAt: -1 })
         .lean();
 
       await logActivity({
         userId: loggedInUser._id,
         entityType: "Warehouse",
-        entityId: warehouses._id,
         actionType: "Read",
-        description: `${loggedInUser.userName} read warehouse ${warehouses.warehouseName}`,
+        description: `${loggedInUser._id} viewed warehouse list`,
       });
 
       return {
@@ -200,6 +267,16 @@ export class WarehouseService {
 
   async update(id, data, loggedInUser) {
     try {
+      /* -------- 0. Owner check -------- */
+      if (!loggedInUser.owner) {
+        return {
+          success: false,
+          data: { message: "Only owner users can update a warehouse" },
+          statusCode: 403,
+        };
+      }
+
+      /* -------- 1. Validate Warehouse ID -------- */
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return {
           success: false,
@@ -208,10 +285,10 @@ export class WarehouseService {
         };
       }
 
+      /* -------- 2. Find Warehouse -------- */
       const warehouse = await Warehouse.findOne({
         _id: id,
-        customerId: loggedInUser.customerId,
-        status: STATUS.ACTIVE,
+        status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
       });
 
       if (!warehouse) {
@@ -222,46 +299,180 @@ export class WarehouseService {
         };
       }
 
-      /* Basic field updates */
-      if (data.warehouseName)
+      /* -------- 3. Update Customer (NEW) -------- */
+      if (data.customerId !== undefined) {
+        if (!mongoose.Types.ObjectId.isValid(data.customerId)) {
+          return {
+            success: false,
+            data: { message: "Invalid customer ID" },
+            statusCode: StatusCodes.BAD_REQUEST,
+          };
+        }
+
+        const customerExists = await Customer.exists({
+          _id: data.customerId,
+        });
+
+        if (!customerExists) {
+          return {
+            success: false,
+            data: { message: "Customer not found" },
+            statusCode: StatusCodes.NOT_FOUND,
+          };
+        }
+
+        // Prevent duplicate warehouse for same customer
+        const duplicate = await Warehouse.findOne({
+          _id: { $ne: warehouse._id },
+          customerId: data.customerId,
+          warehouseName: data.warehouseName || warehouse.warehouseName,
+          warehouseId: warehouse.warehouseId,
+        });
+
+        if (duplicate) {
+          return {
+            success: false,
+            data: {
+              message:
+                "Warehouse with same name and ID already exists for this customer",
+            },
+            statusCode: StatusCodes.CONFLICT,
+          };
+        }
+
+        warehouse.customerId = data.customerId;
+      }
+
+      /* -------- 4. Basic Field Updates -------- */
+      if (data.warehouseName !== undefined) {
+        if (!data.warehouseName.trim()) {
+          return {
+            success: false,
+            data: { message: "Warehouse name cannot be empty" },
+            statusCode: 400,
+          };
+        }
         warehouse.warehouseName = data.warehouseName.trim();
+      }
 
-      if (data.warehouseLocation)
-        warehouse.warehouseLocation = data.warehouseLocation.trim();
+      if (data.warehouseLocation !== undefined) {
+        warehouse.warehouseLocation = data.warehouseLocation?.trim();
+      }
 
-      if (data.status !== undefined) warehouse.status = data.status;
+      if (data.status !== undefined) {
+        warehouse.status = data.status;
+      }
 
-      /* Add / Update items */
+      /* -------- 5. Add / Update Items -------- */
       if (Array.isArray(data.items)) {
-        for (const newItem of data.items) {
+        const itemIds = [];
+
+        for (const item of data.items) {
+          if (!item.itemMasterId) {
+            return {
+              success: false,
+              data: { message: "itemMasterId is required" },
+              statusCode: 400,
+            };
+          }
+
+          if (
+            item.warehouseLimit == null ||
+            item.warehouseReorderLevel == null ||
+            item.warehouseSafeStock == null
+          ) {
+            return {
+              success: false,
+              data: {
+                message:
+                  "warehouseLimit, warehouseReorderLevel and warehouseSafeStock are required",
+              },
+              statusCode: 400,
+            };
+          }
+
+          if (item.warehouseLimit < 0 || item.warehouseSafeStock < 0) {
+            return {
+              success: false,
+              data: { message: "Stock values cannot be negative" },
+              statusCode: 400,
+            };
+          }
+
+          if (itemIds.includes(item.itemMasterId.toString())) {
+            return {
+              success: false,
+              data: { message: "Duplicate item in request" },
+              statusCode: 400,
+            };
+          }
+
+          itemIds.push(item.itemMasterId.toString());
+
+          const exists = await ItemMaster.exists({
+            _id: item.itemMasterId,
+          });
+
+          if (!exists) {
+            return {
+              success: false,
+              data: { message: `Item not found: ${item.itemMasterId}` },
+              statusCode: 404,
+            };
+          }
+
           const existingItem = warehouse.items.find(
-            (i) => i.itemMasterId.toString() === newItem.itemMasterId,
+            (i) => i.itemMasterId.toString() === item.itemMasterId.toString(),
           );
 
           if (existingItem) {
-            // Update existing item
-            existingItem.warehouseLimit = Number(newItem.warehouseLimit);
+            existingItem.warehouseLimit = Number(item.warehouseLimit);
             existingItem.warehouseReorderLevel = Number(
-              newItem.warehouseReorderLevel,
+              item.warehouseReorderLevel,
             );
-            existingItem.warehouseSafeStock = Number(
-              newItem.warehouseSafeStock,
-            );
+            existingItem.warehouseSafeStock = Number(item.warehouseSafeStock);
+            existingItem.supplerName = item.supplerName?.trim();
+            existingItem.lastTransationQuantity =
+              item.lastTransationQuantity != null
+                ? Number(item.lastTransationQuantity)
+                : null;
+            existingItem.lastTransactionDate = item.lastTransactionDate
+              ? new Date(item.lastTransactionDate)
+              : null;
           } else {
-            // Add new item
             warehouse.items.push({
-              itemMasterId: newItem.itemMasterId,
-              warehouseLimit: Number(newItem.warehouseLimit),
-              warehouseReorderLevel: Number(newItem.warehouseReorderLevel),
+              itemMasterId: item.itemMasterId,
+              warehouseLimit: Number(item.warehouseLimit),
+              warehouseReorderLevel: Number(item.warehouseReorderLevel),
+              warehouseSafeStock: Number(item.warehouseSafeStock),
+              supplerName: item.supplerName?.trim(),
+              lastTransationQuantity:
+                item.lastTransationQuantity != null
+                  ? Number(item.lastTransationQuantity)
+                  : null,
+              lastTransactionDate: item.lastTransactionDate
+                ? new Date(item.lastTransactionDate)
+                : null,
             });
           }
         }
       }
 
+      /* -------- 6. Update metadata -------- */
       warehouse.updatedBy = loggedInUser.userName;
 
       await warehouse.save();
 
+      /* -------- 7. Log Activity -------- */
+      await logActivity({
+        userId: loggedInUser._id,
+        entityType: "Warehouse",
+        entityId: warehouse._id,
+        actionType: "Updated",
+        description: `${loggedInUser.userName} updated warehouse ${warehouse.warehouseName}`,
+      });
+
+      /* -------- 8. Success -------- */
       return {
         success: true,
         statusCode: StatusCodes.OK,
@@ -276,113 +487,9 @@ export class WarehouseService {
     }
   }
 
-  async getCustomerWarehouses(query, loggedInUser) {
-    try {
-      const filter = {
-        customerId: query.id,
-        status: STATUS.ACTIVE,
-      };
-
-      // Optional single warehouse fetch
-      if (query.id) {
-        if (!mongoose.Types.ObjectId.isValid(query.id)) {
-          return {
-            success: false,
-            data: { message: "Invalid warehouse ID" },
-            statusCode: StatusCodes.BAD_REQUEST,
-          };
-        }
-      }
-
-      const warehouses = await Warehouse.find(filter)
-        .sort({ createdAt: -1 })
-        .lean();
-
-      if (query.id && warehouses.length === 0) {
-        return {
-          success: false,
-          data: { message: "Warehouse not found" },
-          statusCode: StatusCodes.NOT_FOUND,
-        };
-      }
-
-      return {
-        success: true,
-        statusCode: StatusCodes.OK,
-        data: warehouses,
-      };
-    } catch (err) {
-      return {
-        success: false,
-        data: { message: err.message },
-        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
-      };
-    }
-  }
-
-  async deleteItem(warehouseId, itemId, loggedInUser) {
-    try {
-      if (
-        !mongoose.Types.ObjectId.isValid(warehouseId) ||
-        !mongoose.Types.ObjectId.isValid(itemId)
-      ) {
-        return {
-          success: false,
-          data: { message: "Invalid ID" },
-          statusCode: StatusCodes.BAD_REQUEST,
-        };
-      }
-
-      const warehouse = await Warehouse.findOne({
-        _id: warehouseId,
-        customerId: loggedInUser.customerId,
-        status: STATUS.ACTIVE,
-      });
-
-      console.log("warehouse", warehouse.items);
-
-      if (!warehouse) {
-        return {
-          success: false,
-          data: { message: "Warehouse not found" },
-          statusCode: StatusCodes.NOT_FOUND,
-        };
-      }
-
-      const initialLength = warehouse.items.length;
-
-      warehouse.items = warehouse.items.filter(
-        (item) => item.itemMasterId.toString() !== itemId,
-      );
-
-      console.log(warehouse.items);
-
-      if (warehouse.items.length === initialLength) {
-        return {
-          success: false,
-          data: { message: "Item not found in warehouse" },
-          statusCode: StatusCodes.NOT_FOUND,
-        };
-      }
-
-      await warehouse.save();
-
-      return {
-        success: true,
-        statusCode: StatusCodes.OK,
-        data: { message: "Item removed successfully" },
-      };
-    } catch (err) {
-      return {
-        success: false,
-        data: { message: err.message },
-        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
-      };
-    }
-  }
-
   async deleteWarehouse(id, loggedInUser) {
     try {
+      // ✅ 1. Validate ID
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return {
           success: false,
@@ -391,13 +498,19 @@ export class WarehouseService {
         };
       }
 
+      // ✅ 2. Build Filter Based On Role
+      let filter = { _id: id };
+
+      // If NOT owner → restrict by customerId
+      if (!loggedInUser?.owner) {
+        filter.customerId = loggedInUser.customerId._id;
+      }
+
+      // ✅ 3. Soft Delete (Recommended)
       const warehouse = await Warehouse.findOneAndUpdate(
+        filter,
         {
-          _id: id,
-          customerId: loggedInUser.customerId,
-        },
-        {
-          status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
+          status: STATUS.DELETED, // Proper soft delete
           updatedBy: loggedInUser.userName,
         },
         { new: true },
@@ -406,7 +519,7 @@ export class WarehouseService {
       if (!warehouse) {
         return {
           success: false,
-          data: { message: "Warehouse not found" },
+          data: { message: "Warehouse not found or access denied" },
           statusCode: StatusCodes.NOT_FOUND,
         };
       }
@@ -421,6 +534,230 @@ export class WarehouseService {
         success: false,
         data: { message: err.message },
         statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+      };
+    }
+  }
+
+  async warehouseByItem(query, loggedInUser) {
+    try {
+      const { itemMasterId, customerId } = query;
+
+      // ===============================
+      // ✅ Validate itemMasterId
+      // ===============================
+      if (!itemMasterId || !mongoose.Types.ObjectId.isValid(itemMasterId)) {
+        return {
+          success: false,
+          statusCode: StatusCodes.BAD_REQUEST,
+          data: { message: "Valid itemMasterId is required" },
+        };
+      }
+
+      // ===============================
+      // ✅ Extract Token Data (YOUR STRUCTURE)
+      // ===============================
+      const tokenData = loggedInUser;
+
+      if (!tokenData) {
+        return {
+          success: false,
+          statusCode: StatusCodes.UNAUTHORIZED,
+          data: { message: "Invalid token data" },
+        };
+      }
+
+      const isOwner = tokenData.owner === true;
+      const tokenCustomerId = tokenData.customerId?._id;
+
+      // ===============================
+      // ✅ Build Filter
+      // ===============================
+      const filter = {
+        status: STATUS.ACTIVE,
+        // Safe match (handles ObjectId + string old data)
+        "items.itemMasterId": {
+          $in: [new mongoose.Types.ObjectId(itemMasterId), itemMasterId],
+        },
+      };
+
+      // ===============================
+      // ✅ Owner vs Normal User
+      // ===============================
+      if (isOwner) {
+        // Owner can optionally filter by customer
+        if (customerId) {
+          if (!mongoose.Types.ObjectId.isValid(customerId)) {
+            return {
+              success: false,
+              statusCode: StatusCodes.BAD_REQUEST,
+              data: { message: "Invalid customerId" },
+            };
+          }
+
+          filter.customerId = new mongoose.Types.ObjectId(customerId);
+        }
+      } else {
+        // Normal user → restrict to token customer
+        if (!tokenCustomerId) {
+          return {
+            success: false,
+            statusCode: StatusCodes.FORBIDDEN,
+            data: { message: "Customer not found in token" },
+          };
+        }
+
+        filter.customerId = new mongoose.Types.ObjectId(tokenCustomerId);
+      }
+
+      // ===============================
+      // ✅ Query (Only One Warehouse)
+      // ===============================
+      const warehouse = await Warehouse.findOne(filter)
+        .select("warehouseId warehouseName customerId _id")
+        .lean();
+
+      if (!warehouse) {
+        return {
+          success: false,
+          statusCode: StatusCodes.NOT_FOUND,
+          data: { message: "Warehouse not found for this item" },
+        };
+      }
+
+      // ===============================
+      // ✅ Success Response
+      // ===============================
+      return {
+        success: true,
+        statusCode: StatusCodes.OK,
+        data: warehouse,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+        data: { message: err.message },
+      };
+    }
+  }
+
+  async warehouseTransactionByItem(query, loggedInUser) {    
+    try {
+      const { itemMasterId, customerId } = query;
+
+      // ===============================
+      // ✅ Validate itemMasterId
+      // ===============================
+      if (!itemMasterId || !mongoose.Types.ObjectId.isValid(itemMasterId)) {
+        return {
+          success: false,
+          statusCode: StatusCodes.BAD_REQUEST,
+          data: { message: "Valid itemMasterId is required" },
+        };
+      }
+
+      const tokenData = loggedInUser;
+
+      if (!tokenData) {
+        return {
+          success: false,
+          statusCode: StatusCodes.UNAUTHORIZED,
+          data: { message: "Invalid token data" },
+        };
+      }
+
+      const isOwner = tokenData.owner === true;
+      const tokenCustomerId = tokenData.customerId?._id;
+
+      // ===============================
+      // ✅ Build Warehouse Filter (for security)
+      // ===============================
+      const warehouseFilter = {
+        status: STATUS.ACTIVE,
+        "items.itemMasterId": new mongoose.Types.ObjectId(itemMasterId),
+      };
+
+      if (isOwner) {
+        if (customerId) {
+          if (!mongoose.Types.ObjectId.isValid(customerId)) {
+            return {
+              success: false,
+              statusCode: StatusCodes.BAD_REQUEST,
+              data: { message: "Invalid customerId" },
+            };
+          }
+
+          warehouseFilter.customerId = new mongoose.Types.ObjectId(customerId);
+        }
+      } else {
+        if (!tokenCustomerId) {
+          return {
+            success: false,
+            statusCode: StatusCodes.FORBIDDEN,
+            data: { message: "Customer not found in token" },
+          };
+        }
+
+        warehouseFilter.customerId = new mongoose.Types.ObjectId(
+          tokenCustomerId,
+        );
+      }
+
+      // ===============================
+      // ✅ Get allowed warehouse IDs
+      // ===============================
+      const warehouses = await Warehouse.find(warehouseFilter)
+        .select("_id")
+        .lean();
+
+      if (!warehouses.length) {
+        return {
+          success: false,
+          statusCode: StatusCodes.NOT_FOUND,
+          data: { message: "No warehouse found for this item" },
+        };
+      }
+
+      const warehouseIds = warehouses.map((w) => w._id);
+
+      // ===============================
+      // ✅ Get Item Details
+      // ===============================
+      const itemDetails = await ItemMaster.findById(itemMasterId)
+        .select("itemDescription itemImages")
+        .lean();
+
+      if (!itemDetails) {
+        return {
+          success: false,
+          statusCode: StatusCodes.NOT_FOUND,
+          data: { message: "Item not found" },
+        };
+      }
+
+      // ===============================
+      // ✅ Get Transaction History
+      // ===============================
+      const transactions = await WarehouseTransaction.find({
+        itemMasterId: new mongoose.Types.ObjectId(itemMasterId),
+        warehouseId: { $in: warehouseIds },
+      })
+        .select(
+          "transactionType quantity itemMasterId transactionDate warehouseId",
+        )
+        .sort({ transactionDate: -1 })
+        .lean();
+
+      return {
+        success: true,
+        statusCode: StatusCodes.OK,
+        data: { itemDetails, transactions },
+      };
+    } catch (err) {
+      return {
+        success: false,
+        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+        data: { message: err.message },
       };
     }
   }

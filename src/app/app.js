@@ -25,6 +25,8 @@ import { binMasterRouter } from "./Bin/routes/binConfiguration.route.js";
 import { customerTypeRouter } from "./CustomerMaster/routes/customerType.route.js";
 import { exportRouter } from "./export/export.route.js";
 import binDashboardRouter from "./Bin/routes/binDashboard.route.js";
+import orderRouter from "./Warehouse/routes/order.route.js";
+import bomRouter from "./Warehouse/routes/bom.route.js";
 
 const { urlencoded, json } = bodyParser;
 
@@ -50,7 +52,7 @@ export function init(app) {
 
   app.use(`${BASE_URL}/customer-master`, customerMasterRouter);
   app.use(`${BASE_URL}/user-type`, userTypeRouter);
-  app.use(`${BASE_URL}/User`, userMasterRouter);
+  app.use(`${BASE_URL}/user`, userMasterRouter);
   app.use(`${BASE_URL}/project`, projectMasterRouter);
   app.use(`${BASE_URL}/item-category`, itemCategoryRouter);
   app.use(`${BASE_URL}/item-master`, itemMasterRouter);
@@ -59,6 +61,9 @@ export function init(app) {
   app.use(`${BASE_URL}/customer-type`, customerTypeRouter);
   app.use(`${BASE_URL}/export`, exportRouter);
   app.use(`${BASE_URL}/bin-dashboard`, binDashboardRouter);
+  app.use(`${BASE_URL}/order`,orderRouter );
+  app.use(`${BASE_URL}/bom`,bomRouter)
+
 
   // Static files
   app.use("/storage", express.static(path.join(__dirname, "storage")));

@@ -51,6 +51,24 @@ const customerSchema = new mongoose.Schema(
       index: true,
     },
 
+    mobileNumber: [
+      {
+        type: String,
+        unique: true,
+        index: true,
+      },
+    ],
+
+    position: {
+      type: String,
+      required: true,
+    },
+
+    department: {
+      type: String,
+      required: true,
+    },
+
     adminPassword: {
       type: String,
       required: true,
@@ -106,6 +124,12 @@ const customerSchema = new mongoose.Schema(
     },
     updatedBy: {
       type: String,
+    },
+    // ✅ NEW FIELD
+    owner: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
   },
   { timestamps: true },

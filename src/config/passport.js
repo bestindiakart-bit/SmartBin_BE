@@ -6,7 +6,7 @@ import { StatusCodes } from "http-status-codes";
  * @param {Array} roles - Allowed roles
  * @param {String} tokenType - "accessToken" | "refreshToken"
  */
-export function authenticate(roles = [], tokenType = "accessToken") {
+export function authenticate(roles = [], tokenType = "accessToken") {  
   return (req, res, next) => {
     passport.authenticate(
       "jwt",

@@ -58,7 +58,7 @@ const itemMasterSchema = new mongoose.Schema(
       type: Number,
     },
 
-    price: {
+    outerBoxQuantity: {
       type: Number,
     },
 
@@ -77,6 +77,11 @@ const itemMasterSchema = new mongoose.Schema(
       default: 0,
     },
 
+    warehouseROL: {
+      type: Number,
+      default: 0,
+    },
+
     warehouseStockUrl: {
       type: String,
       trim: true,
@@ -89,6 +94,11 @@ const itemMasterSchema = new mongoose.Schema(
 
     itemImages: {
       type: [String],
+      trim: true,
+    },
+
+    itemDrawing: {
+      type: String,
       trim: true,
     },
 

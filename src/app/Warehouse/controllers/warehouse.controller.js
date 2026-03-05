@@ -9,9 +9,6 @@ export class WarehouseController extends ResponseHandler {
   }
 
   create = async (req, res, next) => {
-    console.log("Request body:", req.body);
-    console.log("Logged in user:", req.user);
-    
     try {
       const data = await this.service.create(req.body, req.user);
       return res.status(data.statusCode).json(data);
@@ -38,31 +35,6 @@ export class WarehouseController extends ResponseHandler {
     }
   };
 
-  getCustomerWarehouses = async (req, res, next) => {
-    try {
-      const data = await this.service.getCustomerWarehouses(
-        req.query,
-        req.user,
-      );
-      return res.status(data.statusCode).json(data);
-    } catch (err) {
-      return next(err);
-    }
-  };
-
-  deleteItem = async (req, res, next) => {
-    try {
-      const result = await this.service.deleteItem(
-        req.params.id,
-        req.params.itemMasterId,
-        req.user,
-      );
-      return res.status(result.statusCode).json(result);
-    } catch (error) {
-      return next(error);
-    }
-  };
-
   deleteWarehouse = async (req, res, next) => {
     try {
       const result = await this.service.deleteWarehouse(
@@ -72,6 +44,27 @@ export class WarehouseController extends ResponseHandler {
       return res.status(result.statusCode).json(result);
     } catch (error) {
       return next(error);
+    }
+  };
+
+  warehouseByItem = async (req, res, next) => {
+    try {
+      const data = await this.service.warehouseByItem(req.query, req.user);
+      return res.status(data.statusCode).json(data);
+    } catch (err) {
+      return next(err);
+    }
+  };
+  warehouseTransactionByItem = async (req, res, next) => {
+    try {
+      const data = await this.service.warehouseTransactionByItem(
+        req.query,
+        req.user,
+      );
+
+      return res.status(data.statusCode).json(data);
+    } catch (err) {
+      return next(err);
     }
   };
 }

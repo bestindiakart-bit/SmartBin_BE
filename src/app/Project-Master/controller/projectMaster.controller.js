@@ -49,13 +49,13 @@ export class ProjectMasterController extends ResponseHandler {
     }
   };
 
-  // getById = async (req, res, next) => {
-  //   try {
-  //     const data = await this.service.getById(req.params.id, req.user);
-
-  //     return res.status(data.statusCode).json(data);
-  //   } catch (error) {
-  //     return next(error);
-  //   }
-  // };
+  getByCustomer = async (req, res, next) => {
+    try {
+      const { customerId } = req.params;
+      const result = await this.service.getByCustomer(customerId, req.user);
+      return res.status(result.statusCode).json(result);
+    } catch (error) {
+      return next(error);
+    }
+  };
 }

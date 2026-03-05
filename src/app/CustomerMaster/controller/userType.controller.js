@@ -29,6 +29,7 @@ export class UserTypeController extends ResponseHandler {
     }
   };
 
+
   /* ---------------- UPDATE ROLE ---------------- */
   update = async (req, res, next) => {
     try {

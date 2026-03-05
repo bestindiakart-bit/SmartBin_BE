@@ -12,7 +12,10 @@ itemMasterRouter
   .post(
     authenticate(),
     authorize("item_master", "create"),
-    upload.array("itemImages", 10),
+    upload.fields([
+      { name: "itemImages", maxCount: 10 },
+      { name: "itemDrawing", maxCount: 1 },
+    ]),
     itemMasterController.create,
   )
 
@@ -32,7 +35,10 @@ itemMasterRouter
   .put(
     authenticate(),
     authorize("item_master", "edit"),
-    upload.array("itemImages", 10),
+    upload.fields([
+      { name: "itemImages", maxCount: 10 },
+      { name: "itemDrawing", maxCount: 1 },
+    ]),
     itemMasterController.update,
   )
   .delete(

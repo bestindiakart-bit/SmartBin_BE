@@ -26,6 +26,7 @@ projectMasterRouter
     authorize("project_master", "view"),
     projectMasterController.get,
   )
+
   .put(
     authenticate(),
     authorize("project_master", "edit"),
@@ -36,3 +37,9 @@ projectMasterRouter
     authorize("project_master", "delete"),
     projectMasterController.delete,
   );
+
+  projectMasterRouter.route("/by-customer/:customerId").get(
+  authenticate(),
+  authorize("project_master", "view"),
+  projectMasterController.getByCustomer
+);

@@ -25,6 +25,7 @@
  *               - loginEmail
  *               - loginPassword
  *               - userTypeId
+ *               - url
  *             properties:
  *               userName:
  *                 type: string
@@ -32,16 +33,22 @@
  *
  *               loginEmail:
  *                 type: string
+ *                 format: email
  *                 example: john@company.com
  *
  *               loginPassword:
  *                 type: string
+ *                 format: password
  *                 example: StrongPass@123
  *
  *               userTypeId:
  *                 type: string
  *                 description: UserType ObjectId
  *                 example: 65f2a1e4d2a123456789abcd
+ *
+ *               department:
+ *                 type: string
+ *                 example: Logistics
  *
  *               position:
  *                 type: string
@@ -50,10 +57,9 @@
  *               mobile:
  *                 type: string
  *                 example: 9876543210
- *
  *               permissions:
  *                 type: array
- *                 description: Optional custom permissions for the user. All supported modules listed below.
+ *                 description: Optional custom permissions for the user
  *                 items:
  *                   type: object
  *                   properties:
@@ -75,82 +81,12 @@
  *                         - overall_report
  *                     create:
  *                       type: boolean
- *                       example: true
  *                     view:
  *                       type: boolean
- *                       example: true
  *                     edit:
  *                       type: boolean
- *                       example: true
  *                     delete:
  *                       type: boolean
- *                       example: false
- *                 example:
- *                   - module: dashboard
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: customer_master
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: user_master
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: project_master
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: item_master
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: user_type_permission_master
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: warehouse_creation
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: warehouse_order_details
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: bin_configuration
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: bill_of_materials
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: forecast_viewer
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: smart_bin_dashboard
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: overall_report
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
  *
  *     responses:
  *       201:

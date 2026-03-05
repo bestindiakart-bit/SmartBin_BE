@@ -18,14 +18,27 @@ export class UserMasterService {
         loginEmail,
         loginPassword,
         userTypeId,
+        department,
         position,
         mobile,
+        customerId,
       } = data;
-
-      if (!userName || !loginEmail || !loginPassword) {
+      
+      // ==========================================
+      // ✅ REQUIRED FIELD CHECK
+      // ==========================================
+      if (!userName || !loginEmail || !loginPassword || !customerId) {
         return {
           success: false,
           data: { errors: "Required fields missing" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(customerId)) {
+        return {
+          success: false,
+          data: { errors: "Invalid customer ID" },
           statusCode: StatusCodes.BAD_REQUEST,
         };
       }
@@ -42,9 +55,14 @@ export class UserMasterService {
         };
       }
 
-      // Get customer from token
+      // ==========================================
+      // ✅ CUSTOMER VALIDATION
+      // ==========================================
       const customer = await Customer.findOne(
-        { _id: loggedInUser.customerId, status: STATUS.ACTIVE },
+        {
+          _id: customerId,
+          status: STATUS.ACTIVE, // 🔥 must be active
+        },
         { companyName: 1, url: 1 },
       ).lean();
 
@@ -52,39 +70,75 @@ export class UserMasterService {
         return {
           success: false,
           data: { errors: "Customer not found or inactive" },
-          statusCode: 400,
+          statusCode: StatusCodes.BAD_REQUEST,
         };
       }
 
+      // ==========================================
+      // 🔐 NON-OWNER RESTRICTION
+      // ==========================================
+      // If logged user is NOT system owner,
+      // they can only create inside their own customer
+      if (!loggedInUser.owner) {
+
+        if (loggedInUser.customerId._id.toString() !== customerId) {
+          return {
+            success: false,
+            data: { message: "You cannot create user for another customer" },
+            statusCode: StatusCodes.FORBIDDEN,
+          };
+        }
+      }
+
+      // ==========================================
+      // ✅ ROLE VALIDATION
+      // ==========================================
+      let role = null;
+
       if (userTypeId) {
-        const role = await UserType.findOne({
+        if (!mongoose.Types.ObjectId.isValid(userTypeId)) {
+          return {
+            success: false,
+            data: { message: "Invalid user type ID" },
+            statusCode: StatusCodes.BAD_REQUEST,
+          };
+        }
+
+        role = await UserType.findOne({
           _id: userTypeId,
+          status: STATUS.ACTIVE,
         }).lean();
 
         if (!role) {
           return {
             success: false,
-            data: { message: "Invalid user type" },
-            statusCode: 400,
+            data: { message: "Invalid or inactive user type" },
+            statusCode: StatusCodes.BAD_REQUEST,
           };
         }
       }
 
+      // ==========================================
+      // ✅ GENERATE USER ID
+      // ==========================================
       const userId = await generateUserId(customer.companyName);
 
       const hashedPassword = await argon2.hash(loginPassword);
 
-      // Build Permissions
-      let finalPermissions;
+      // ==========================================
+      // ✅ BUILD PERMISSIONS
+      // ==========================================
+      let finalPermissions = [];
 
-      // If frontend sends permissions → normalize it
       if (data.permissions && Array.isArray(data.permissions)) {
         finalPermissions = buildPermissionsFromRequest(data.permissions);
-      } else {
-        // Otherwise inherit from role (UserType)
+      } else if (role) {
         finalPermissions = role.permissions || [];
       }
 
+      // ==========================================
+      // ✅ CREATE USER
+      // ==========================================
       const user = await User.create({
         userId,
         userName,
@@ -94,30 +148,32 @@ export class UserMasterService {
         customerId: customer._id,
         companyName: customer.companyName,
         url: customer.url,
+        department,
         position,
         mobile,
         permissions: finalPermissions,
         createdBy: loggedInUser.userName,
+        isFirstLogin:"false"
       });
 
+      // ==========================================
+      // 📧 SEND MAIL (NON-BLOCKING)
+      // ==========================================
       try {
         await sendMail({
           to: email,
           subject: "Your SmartBin Account Credentials",
           html: `
-      <h3>Welcome to SmartBin</h3>
-      <p>Hello ${userName},</p>
-      <p>Your account has been created successfully.</p>
-      <p><b>Login Email:</b> ${email}</p>
-      <p><b>Password:</b> ${loginPassword}</p>
-      <p>Please login and change your password immediately.</p>
-      <br/>
-      <p>Regards,<br/>SmartBin Team</p>
-    `,
+          <h3>Welcome to SmartBin</h3>
+          <p>Hello ${userName},</p>
+          <p>Your account has been created successfully.</p>
+          <p><b>Login Email:</b> ${email}</p>
+          <p><b>Password:</b> ${loginPassword}</p>
+          <p>Please login and change your password immediately.</p>
+        `,
         });
       } catch (mailError) {
         console.error("Email sending failed:", mailError.message);
-        // Do NOT block user creation if email fails
       }
 
       return {
@@ -140,28 +196,48 @@ export class UserMasterService {
 
   async get(id, loggedInUser) {
     try {
-      const customerObjectId = new mongoose.Types.ObjectId(
-        loggedInUser.customerId,
-      );
+      // Base filter
       const filter = {
-        customerId: customerObjectId,
         status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
-        isMainAdmin: { $ne: true }, // Always exclude main admin
+        isMainAdmin: { $ne: true },
       };
 
+      // Non-owner users → restrict by their own customerId
+      if (!loggedInUser.owner) {
+        if (!loggedInUser.customerId || !loggedInUser.customerId._id) {
+          return {
+            success: false,
+            statusCode: 400,
+            data: { message: "Customer ID missing in login token" },
+          };
+        }
+
+        const customerIdStr = loggedInUser.customerId._id.toString();
+
+        if (!mongoose.Types.ObjectId.isValid(customerIdStr)) {
+          return {
+            success: false,
+            statusCode: 400,
+            data: { message: "Invalid customer ID in token" },
+          };
+        }
+
+        filter.customerId = new mongoose.Types.ObjectId(customerIdStr);
+      }
+
+      // Fetch by specific user ID
       if (id) {
         if (!mongoose.Types.ObjectId.isValid(id)) {
           return {
             success: false,
-            data: { message: "Invalid user ID" },
             statusCode: 400,
+            data: { message: "Invalid user ID" },
           };
         }
 
         filter._id = new mongoose.Types.ObjectId(id);
       }
 
-      // Get users
       const users = await User.find(filter, {
         loginPassword: 0,
         refreshToken: 0,
@@ -177,7 +253,6 @@ export class UserMasterService {
         };
       }
 
-      // Get role counts using aggregation
       const roleCounts = await User.aggregate([
         { $match: filter },
         { $group: { _id: "$userTypeId", count: { $sum: 1 } } },
@@ -210,8 +285,8 @@ export class UserMasterService {
     } catch (error) {
       return {
         success: false,
-        data: { errors: error.message },
         statusCode: 500,
+        data: { message: error.message },
       };
     }
   }
@@ -276,7 +351,6 @@ export class UserMasterService {
 
       /* ---------------- BASIC FIELDS ---------------- */
       const allowed = ["userName", "position", "mobile", "status"];
-
       for (let key of allowed) {
         if (data[key] !== undefined) {
           updateData[key] = data[key];
@@ -288,23 +362,35 @@ export class UserMasterService {
         updateData.permissions = buildPermissionsFromRequest(data.permissions);
       }
 
-      const updated = await User.findOneAndUpdate(
-        {
-          _id: id,
-          customerId: loggedInUser.customerId,
-          status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
-        },
-        updateData,
-        {
-          returnDocument: "after",
-          projection: { loginPassword: 0 },
-        },
-      ).lean();
+      /* ---------------- BUILD FILTER ---------------- */
+      const filter = {
+        _id: id,
+        status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
+      };
+
+      // Only apply customerId restriction if logged-in user is NOT owner
+      if (!loggedInUser.owner) {
+        if (!loggedInUser.customerId) {
+          return {
+            success: false,
+            statusCode: 403,
+            data: { errors: "Non-owner user must have a valid customerId" },
+          };
+        }
+
+        filter.customerId = loggedInUser.customerId;
+      }
+
+      /* ---------------- UPDATE USER ---------------- */
+      const updated = await User.findOneAndUpdate(filter, updateData, {
+        returnDocument: "after",
+        projection: { loginPassword: 0 },
+      }).lean();
 
       if (!updated) {
         return {
           success: false,
-          data: { errors: "User not found" },
+          data: { errors: "User not found or access denied" },
           statusCode: 404,
         };
       }
@@ -368,9 +454,50 @@ export class UserMasterService {
     }
   }
 
+  async getByCustomer(customerId, loggedInUser) {
+    try {
+      let finalCustomerId = customerId;
+
+      // If not owner, force their own customerId
+      if (!loggedInUser.owner) {
+        finalCustomerId = loggedInUser.customerId._id.toString();
+      }
+
+      // Validate AFTER deciding finalCustomerId
+      if (!mongoose.Types.ObjectId.isValid(finalCustomerId)) {
+        return {
+          success: false,
+          statusCode: 400,
+          data: { message: "Invalid customer ID" },
+        };
+      }
+
+      const users = await User.find(
+        {
+          customerId: finalCustomerId, // ❌ No need to wrap in new ObjectId
+          status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
+        },
+        { loginPassword: 0, refreshToken: 0 },
+      )
+        .populate("userTypeId", "userTypeName")
+        .lean();
+
+      return {
+        success: true,
+        statusCode: 200,
+        data: users,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: 500,
+        data: { message: error.message },
+      };
+    }
+  }
+
   async login(data) {
     try {
-      console.log(data);
       const { loginEmail, loginPassword } = data;
 
       if (!loginEmail || !loginPassword) {
@@ -479,7 +606,9 @@ export class UserMasterService {
       const user = await User.findOne({
         loginEmail: email,
         status: STATUS.ACTIVE,
-      }).populate("userTypeId");
+      })
+        .populate("userTypeId")
+        .populate("customerId");
 
       if (!user) {
         return {
@@ -523,10 +652,11 @@ export class UserMasterService {
         _id: user._id,
         role: user.userTypeId.userTypeName,
         customerId: user.customerId,
-        userName: user.userName,
         url: user.url,
+        owner: user.customerId.owner,
         permissions: user.permissions,
       });
+      // console.log("token--->", { owner: user.customerId.owner });
 
       const hashedRefresh = await argon2.hash(tokens.refreshToken);
       user.refreshToken = hashedRefresh;

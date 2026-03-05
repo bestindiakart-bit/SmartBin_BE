@@ -64,7 +64,7 @@
  * /customer-master:
  *   post:
  *     summary: Create a new customer with admin user
- *     description: Creates a customer along with an ADMIN user. Optionally accepts custom permissions for the admin user.
+ *     description: Creates a customer along with an ADMIN user.
  *     tags: [Customers]
  *     security:
  *       - userAuth: []
@@ -78,11 +78,16 @@
  *               - companyName
  *               - customerName
  *               - customerType
+ *               - transitDays
  *               - gstNumber
  *               - adminEmail
  *               - adminPassword
+ *               - position
+ *               - department
  *               - shippingAddress1
+ *               - shippingAddress2
  *               - billingAddress
+ *               - geoLocation
  *             properties:
  *               companyName:
  *                 type: string
@@ -92,8 +97,14 @@
  *                 type: string
  *                 example: Rahim
  *
+ *               customerType:
+ *                 type: string
+ *                 description: CustomerType ObjectId
+ *                 example: 69981f122f12e02c409474bf
+ *
  *               transitDays:
  *                 type: number
+ *                 minimum: 0
  *                 example: 5
  *
  *               gstNumber:
@@ -102,11 +113,27 @@
  *
  *               adminEmail:
  *                 type: string
+ *                 format: email
  *                 example: admin@smartbin.com
  *
  *               adminPassword:
  *                 type: string
+ *                 format: password
  *                 example: StrongPassword@123
+ *
+ *               mobileNumber:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: ["9876543210"]
+ *
+ *               position:
+ *                 type: string
+ *                 example: Operations Manager
+ *
+ *               department:
+ *                 type: string
+ *                 example: Logistics
  *
  *               shippingAddress1:
  *                 type: string
@@ -120,154 +147,54 @@
  *                 type: string
  *                 example: Chennai Billing Office
  *
- *               customerType:
- *                 type: string
- *                 description: CustomerType ObjectId
- *                 example: 69981f122f12e02c409474bf
- *
  *               geoLocation:
  *                 type: object
- *                 description: GeoJSON location object
+ *                 required:
+ *                   - coordinates
  *                 properties:
  *                   type:
  *                     type: string
+ *                     enum: [Point]
  *                     example: Point
  *                   coordinates:
  *                     type: array
+ *                     description: [longitude, latitude]
  *                     items:
  *                       type: number
  *                     example: [80.2707, 13.0827]
  *
+ *               isMainAdmin:
+ *                 type: boolean
+ *                 example: true
+ *
+ *               owner:
+ *                 type: boolean
+ *                 example: true
+ *
+ *               status:
+ *                 type: number
+ *                 example: 1
+ *
  *               permissions:
  *                 type: array
- *                 description: Optional custom permissions for admin user. All supported modules listed below.
+ *                 description: Optional custom permissions for admin user
  *                 items:
  *                   type: object
  *                   properties:
  *                     module:
  *                       type: string
- *                       enum:
- *                         - dashboard
- *                         - customer_master
- *                         - user_master
- *                         - project_master
- *                         - item_master
- *                         - user_type_permission_master
- *                         - warehouse_creation
- *                         - warehouse_order_details
- *                         - bin_configuration
- *                         - bill_of_materials
- *                         - forecast_viewer
- *                         - smart_bin_dashboard
- *                         - overall_report
  *                     create:
  *                       type: boolean
- *                       example: true
  *                     view:
  *                       type: boolean
- *                       example: true
  *                     edit:
  *                       type: boolean
- *                       example: true
  *                     delete:
  *                       type: boolean
- *                       example: false
- *                 example:
- *                   - module: dashboard
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: customer_master
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: user_master
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: project_master
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: item_master
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: user_type_permission_master
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: warehouse_creation
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: warehouse_order_details
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: bin_configuration
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: bill_of_materials
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: forecast_viewer
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: smart_bin_dashboard
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
- *                   - module: overall_report
- *                     create: true
- *                     view: true
- *                     edit: true
- *                     delete: true
  *
  *     responses:
  *       201:
  *         description: Customer created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 statusCode:
- *                   type: number
- *                   example: 201
- *                 data:
- *                   type: object
- *                   properties:
- *                     customerId:
- *                       type: string
- *                       example: SBCUSTOMER-002
- *                     companyName:
- *                       type: string
- *                       example: Smart Bin Pvt Ltd
- *                     adminEmail:
- *                       type: string
- *                       example: admin@smartbin.com
- *                     customerType:
- *                       type: string
- *                       example: INDUSTRIAL
  *
  *       400:
  *         description: Invalid request data
@@ -276,7 +203,7 @@
  *         description: Customer type or ADMIN role not found
  *
  *       409:
- *         description: Duplicate GST or Admin email
+ *         description: Duplicate GST, Admin email or Mobile number
  *
  *       500:
  *         description: Internal server error

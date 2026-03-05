@@ -17,4 +17,31 @@ export class BinDashboardController extends ResponseHandler {
       return next(error);
     }
   };
+
+  getDashboard = async (req, res, next) => {
+    try {
+      const result = await this.service.getDashboard(req.user);
+      return res.status(result.statusCode).json(result);
+    } catch (error) {
+      return next(error);
+    }
+  };
+
+  processIotData = async (req, res, next) => {
+    try {
+      const result = await this.service.processPayload(req.body);
+      return res.status(result.statusCode).json(result);
+    } catch (error) {
+      return next(error);
+    }
+  };
+
+  getAllLiveStatus = async (req, res, next) => {
+    try {
+      const result = await this.service.getAllLiveStatus(req.query);
+      return res.status(result.statusCode).json(result);
+    } catch (error) {
+      return next(error);
+    }
+  };
 }

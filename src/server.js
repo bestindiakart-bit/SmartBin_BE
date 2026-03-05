@@ -3,7 +3,7 @@ import { config } from "dotenv";
 import { Logger } from "./utils/logger.js";
 import { init } from "./app/app.js";
 import { connectToDatabase } from "./config/database.js";
-import { connectRedis } from "./config/redisClient.js";
+// import { connectRedis } from "./config/redisClient.js";
 
 const env = config();
 const app = express();
@@ -16,7 +16,7 @@ if (env.error) {
 const startServer = async () => {
   try {
     await connectToDatabase();   // MongoDB
-    await connectRedis();        // Redis
+    // await connectRedis();        // Redis
 
     init(app);
 

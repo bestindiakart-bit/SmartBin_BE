@@ -11,13 +11,14 @@ const storage = multer.diskStorage({
     try {
       let folderPath;
 
-      if (file.fieldname === "itemImage") {
+      if (file.fieldname === "itemImages") {
         folderPath = path.join(__dirname, "../../storage/itemImage");
+      } else if (file.fieldname === "itemDrawing") {
+        folderPath = path.join(__dirname, "../../storage/itemDrawing");
       } else {
         folderPath = path.join(__dirname, "../../storage/admin");
       }
 
-      // Ensure folder exists
       if (!fs.existsSync(folderPath)) {
         fs.mkdirSync(folderPath, { recursive: true });
       }
@@ -47,6 +48,9 @@ const fileFilter = (req, file, cb) => {
     "video/quicktime", // .mov
     "video/x-msvideo", // .avi
     "video/x-matroska", // .mkv
+
+    // PDF
+    "application/pdf",
   ];
 
   if (allowedTypes.includes(file.mimetype)) {

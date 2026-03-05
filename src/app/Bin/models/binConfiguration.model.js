@@ -5,16 +5,13 @@ const binMasterSchema = new mongoose.Schema(
   {
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
+      ref: "Customer",
       required: true,
     },
 
-    customerName: {
-      type: String,
-      required: true,
-    },
-
-    projectName: {
-      type: String,
+    projectId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Project",
       required: true,
     },
 
@@ -31,9 +28,11 @@ const binMasterSchema = new mongoose.Schema(
       trim: true,
     },
 
-    supplierItemName: {
-      type: String,
-      trim: true,
+    itemMasterId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ItemMaster",
+      required: true,
+      index: true,
     },
 
     customerItemName: {
@@ -41,12 +40,20 @@ const binMasterSchema = new mongoose.Schema(
       required: true,
     },
 
-    binMaxQuantity: {
+    binAllowablelimit: {
       type: Number,
       required: true,
     },
 
-    binMaxWeight: {
+    binAllowableWeight: {
+      type: Number,
+    },
+
+    customerAllowableLimit: {
+      type: Number,
+    },
+
+    customerAllowableWeight: {
       type: Number,
     },
 
@@ -65,15 +72,13 @@ const binMasterSchema = new mongoose.Schema(
       required: true,
     },
 
-    weightPerPrice: {
+    weightPerPiece: {
       type: Number,
     },
-
-    itemMasterId: {
+    warehouseId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "ItemMaster",
-      required: true,
-      index: true,
+      ref: "Warehouse",
+      default: null,
     },
 
     status: {
@@ -82,12 +87,6 @@ const binMasterSchema = new mongoose.Schema(
       default: STATUS.ACTIVE,
       index: true,
     },
-
-    isWarehouseCreated: {
-      type: Boolean,
-      default: false,
-    },
-
     createdBy: String,
     updatedBy: String,
   },

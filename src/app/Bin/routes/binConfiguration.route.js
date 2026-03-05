@@ -21,8 +21,25 @@ binMasterRouter
 
 binMasterRouter
   .route("/:id")
+  .get(
+    authenticate(),
+    authorize("bin_configuration", "view"),
+    binMasterController.getById,
+  );
+
+  
+
+binMasterRouter
+  .route("/:id")
   .put(
     authenticate(),
     authorize("bin_configuration", "edit"),
     binMasterController.update,
   );
+
+  binMasterRouter.get(
+  "/items/by-project",
+  authenticate(),
+  authorize("bill_of_materials", "view"),
+  binMasterController.getItemsByCustomerAndProject
+);

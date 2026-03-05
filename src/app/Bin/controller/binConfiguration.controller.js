@@ -43,6 +43,18 @@ export class BinMasterController extends ResponseHandler {
     }
   };
 
+  getItemsByCustomerAndProject = async (req, res, next) => {
+    try {
+      const data = await this.service.getItemsByCustomerAndProject(
+        req.query,
+        req.user,
+      );
+      return res.status(data.statusCode).json(data);
+    } catch (err) {
+      return next(err);
+    }
+  };
+
   // delete = async (req, res, next) => {
   //   try {
   //     const data = await this.service.delete(req.params.id, req.user);

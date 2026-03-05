@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { UserTypeController } from "../controller/userType.controller.js";
 import { authenticate } from "../../../config/passport.js";
+import { authorize } from "../../../middleware/permission.middleware.js";
 
 export const userTypeRouter = Router();
 const userTypeController = new UserTypeController();
@@ -13,17 +14,29 @@ const userTypeController = new UserTypeController();
 |--------------------------------------------------------------------------
 */
 
-userTypeRouter.use(authenticate(["MASTER_ADMIN"]));
+// userTypeRouter.use(authenticate(["MASTER_ADMIN"]));
 
 userTypeRouter
   .route("/")
-  .post(userTypeController.create)
-  .get(userTypeController.get);
+  .post(
+    authenticate(),
+    authorize("user_master", "create"),
+    userTypeController.create,
+  )
+  .get(
+    authenticate(),
+    authorize("user_master", "view"),
+    userTypeController.get,
+  );
 
 userTypeRouter
   .route("/:id")
   .get(userTypeController.get)
-  .put(userTypeController.update)
+  .put(
+    authenticate(),
+    authorize("user_master", "edit"),
+    userTypeController.update,
+  )
   .delete(userTypeController.delete);
 
 /* Future scalable endpoint */

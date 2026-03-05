@@ -7,16 +7,27 @@ import { logActivity } from "../../../utils/activity.util.js";
 export class ItemCategoryService {
   async create(data, loggedInUser) {
     try {
-      const { categoryName, description } = data;
-
-      if (!categoryName) {
+      // -------- 0. Owner check --------
+      if (!loggedInUser.owner) {
         return {
           success: false,
-          data: { message: "Category name required" },
-          statusCode: StatusCodes.BAD_REQUEST,
+          data: { message: "Only owner users can create a category" },
+          statusCode: 403,
         };
       }
 
+      const { categoryName, description } = data;
+
+      // -------- 1. Required validation --------
+      if (!categoryName || !categoryName.trim()) {
+        return {
+          success: false,
+          data: { message: "Category name required" },
+          statusCode: 400,
+        };
+      }
+
+      // -------- 2. Check if category already exists --------
       const exists = await ItemCategory.exists({
         customerId: loggedInUser.customerId,
         categoryName: categoryName.trim(),
@@ -27,17 +38,19 @@ export class ItemCategoryService {
         return {
           success: false,
           data: { message: "Category already exists" },
-          statusCode: StatusCodes.CONFLICT,
+          statusCode: 409,
         };
       }
 
+      // -------- 3. Create category --------
       const category = await ItemCategory.create({
         customerId: loggedInUser.customerId,
         categoryName: categoryName.trim(),
-        description,
+        description: description?.trim(),
         createdBy: loggedInUser.userName,
       });
 
+      // -------- 4. Log activity --------
       await logActivity({
         userId: loggedInUser._id,
         entityType: "ItemCategory",
@@ -48,29 +61,38 @@ export class ItemCategoryService {
 
       return {
         success: true,
-        statusCode: StatusCodes.CREATED,
+        statusCode: 201,
         data: category,
       };
     } catch (err) {
       return {
         success: false,
         data: { message: err.message },
-        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+        statusCode: 500,
       };
     }
   }
 
   async getAll(query, loggedInUser) {
     try {
+      // -------- 0. Owner Check --------
+      if (!loggedInUser?.owner) {
+        return {
+          success: false,
+          statusCode: 403,
+          data: { message: "Only owner users can view item categories" },
+        };
+      }
+
       if (!loggedInUser?.customerId) {
         return {
           success: false,
-          statusCode: StatusCodes.UNAUTHORIZED,
+          statusCode: 401,
           data: { message: "Customer not found in token" },
         };
       }
 
-      // 🔹 Pagination Handling
+      // -------- 1. Pagination Handling --------
       let { page = 1, limit = 10 } = query;
 
       page = parseInt(page);
@@ -82,11 +104,13 @@ export class ItemCategoryService {
 
       const skip = (page - 1) * limit;
 
+      // -------- 2. Filter by customerId and active status --------
       const filter = {
         customerId: loggedInUser.customerId,
         status: STATUS.ACTIVE,
       };
 
+      // -------- 3. Fetch Categories --------
       const [categories, total] = await Promise.all([
         ItemCategory.find(filter)
           .sort({ createdAt: -1 })
@@ -99,9 +123,10 @@ export class ItemCategoryService {
 
       const totalPages = Math.ceil(total / limit);
 
+      // -------- 4. Return Response --------
       return {
         success: true,
-        statusCode: StatusCodes.OK,
+        statusCode: 200,
         data: {
           total,
           totalPages,
@@ -115,7 +140,7 @@ export class ItemCategoryService {
     } catch (error) {
       return {
         success: false,
-        statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+        statusCode: 500,
         data: { message: error.message },
       };
     }
@@ -123,6 +148,16 @@ export class ItemCategoryService {
 
   async update(id, data, loggedInUser) {
     try {
+      // -------- 0. Owner Check --------
+      if (!loggedInUser?.owner) {
+        return {
+          success: false,
+          data: { message: "Only owner users can update item categories" },
+          statusCode: 403,
+        };
+      }
+
+      // -------- 1. Validate ID --------
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return {
           success: false,
@@ -131,23 +166,28 @@ export class ItemCategoryService {
         };
       }
 
+      // -------- 2. Prepare Update Data --------
       const updateData = {
         updatedBy: loggedInUser.userName,
       };
 
-      if (data.categoryName) updateData.categoryName = data.categoryName.trim();
+      if (data.categoryName) {
+        updateData.categoryName = data.categoryName.trim();
+      }
 
-      if (data.description !== undefined)
+      if (data.description !== undefined) {
         updateData.description = data.description;
+      }
 
+      // -------- 3. Update Category --------
       const updated = await ItemCategory.findOneAndUpdate(
         {
           _id: id,
           customerId: loggedInUser.customerId,
-          status: STATUS.ACTIVE,
+          status: STATUS.ACTIVE 
         },
         updateData,
-        { new: true },
+        { returnDocument: "after", runValidators: true }, // <-- Updated here
       ).lean();
 
       if (!updated) {
@@ -158,6 +198,7 @@ export class ItemCategoryService {
         };
       }
 
+      // -------- 4. Log Activity --------
       await logActivity({
         userId: loggedInUser._id,
         entityType: "ItemCategory",
@@ -166,6 +207,7 @@ export class ItemCategoryService {
         description: `${loggedInUser.userName} updated category`,
       });
 
+      // -------- 5. Return Response --------
       return {
         success: true,
         statusCode: StatusCodes.OK,

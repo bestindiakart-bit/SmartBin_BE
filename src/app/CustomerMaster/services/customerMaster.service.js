@@ -11,23 +11,41 @@ import { generateUserId } from "../../../utils/generateUserId.util.js";
 import { CustomerType } from "../models/customerType.models.js";
 import { sendMail } from "../../../utils/mailer.js";
 import { buildPermissionsFromRequest } from "../../../utils/permission.util.js";
+import { config } from "dotenv";
+
+config();
+
 
 export class CustomerMasterService {
   generateSlug(name) {
     return name.trim().toLowerCase().replace(/\s+/g, "-");
   }
 
-  async generateCustomerId() {
-    const last = await Customer.findOne(
-      { customerId: { $regex: /^SBCUSTOMER-/ } },
+  async generateCustomerId(companyName) {
+    // 1️⃣ Take first 5 letters (remove spaces, uppercase)
+    const prefix = companyName
+      .replace(/\s+/g, "") // remove spaces
+      .substring(0, 5) // first 5 letters
+      .toUpperCase(); // uppercase
+
+    const regex = new RegExp(`^${prefix}-`);
+
+    // 2️⃣ Find last customer with same prefix
+    const lastCustomer = await Customer.findOne(
+      { customerId: { $regex: regex } },
       { customerId: 1 },
     )
       .sort({ customerId: -1 })
       .lean();
 
-    const next = last ? parseInt(last.customerId.split("-")[1]) + 1 : 1;
+    let nextNumber = 1;
 
-    return `SBCUSTOMER-${String(next).padStart(3, "0")}`;
+    if (lastCustomer) {
+      const lastNumber = parseInt(lastCustomer.customerId.split("-")[1]);
+      nextNumber = lastNumber + 1;
+    }
+
+    return `${prefix}-${String(nextNumber).padStart(3, "0")}`;
   }
 
   validate(data, isUpdate = false) {
@@ -50,10 +68,22 @@ export class CustomerMasterService {
 
     return null;
   }
-
   async create(data, loggedInUser) {
     try {
-      // Basic Validation
+      // ================================
+      // ✅ 1. OWNER CHECK
+      // ================================
+      if (!loggedInUser?.owner) {
+        return {
+          success: false,
+          data: { message: "Only owner users can create customers" },
+          statusCode: StatusCodes.FORBIDDEN,
+        };
+      }
+
+      // ================================
+      // ✅ 2. BASIC VALIDATION
+      // ================================
       const error = this.validate(data);
       if (error) {
         return {
@@ -63,7 +93,17 @@ export class CustomerMasterService {
         };
       }
 
-      // Validate CustomerType ObjectId
+      if (!Array.isArray(data.mobileNumber) || data.mobileNumber.length === 0) {
+        return {
+          success: false,
+          data: { message: "At least one mobile number is required" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      // ================================
+      // ✅ 3. VALIDATE CUSTOMER TYPE
+      // ================================
       if (!mongoose.Types.ObjectId.isValid(data.customerType)) {
         return {
           success: false,
@@ -72,12 +112,8 @@ export class CustomerMasterService {
         };
       }
 
-      // Check CustomerType exists & active
       const customerType = await CustomerType.findOne(
-        {
-          _id: data.customerType,
-          status: STATUS.ACTIVE,
-        },
+        { _id: data.customerType, status: STATUS.ACTIVE },
         { _id: 1, name: 1 },
       ).lean();
 
@@ -89,7 +125,25 @@ export class CustomerMasterService {
         };
       }
 
-      //GST Duplicate Check
+      // ================================
+      // ✅ CHECK COMPANY NAME (ACTIVE)
+      // ================================
+      const companyExists = await Customer.exists({
+        companyName: data.companyName.trim(),
+        status: STATUS.ACTIVE,
+      });
+
+      if (companyExists) {
+        return {
+          success: false,
+          data: { message: "Company name already exists" },
+          statusCode: StatusCodes.CONFLICT,
+        };
+      }
+
+      // ================================
+      // ✅ 4. DUPLICATE CHECKS
+      // ================================
       const gstExists = await Customer.exists({
         gstNumber: data.gstNumber.toUpperCase(),
       });
@@ -102,7 +156,6 @@ export class CustomerMasterService {
         };
       }
 
-      // Email Duplicate Check
       const emailExists = await User.exists({
         loginEmail: data.adminEmail.toLowerCase(),
       });
@@ -115,63 +168,91 @@ export class CustomerMasterService {
         };
       }
 
-      // Generate IDs
-      const customerId = await this.generateCustomerId();
+      // ================================
+      // ✅ 5. GENERATE IDS
+      // ================================
+      const customerId = await this.generateCustomerId(data.companyName);
       const userId = await generateUserId(data.companyName);
       const url = this.generateSlug(data.companyName);
 
-      // Get ADMIN Role
+      // ================================
+      // ✅ 6. GET SUPER ADMIN ROLE
+      // ================================
       const role = await UserType.findOne(
-        { userTypeName: "ADMIN", status: STATUS.ACTIVE },
+        { userTypeName: "SUPER ADMIN", status: STATUS.ACTIVE },
         { _id: 1 },
       ).lean();
 
       if (!role) {
         return {
           success: false,
-          data: { message: "ADMIN role not found" },
+          data: { message: "SUPER ADMIN role not found" },
           statusCode: StatusCodes.NOT_FOUND,
         };
       }
 
-      // Hash Password
+      // ================================
+      // ✅ 7. HASH PASSWORD
+      // ================================
       const plainPassword = data.adminPassword;
       const hashedPassword = await argon2.hash(plainPassword);
 
-      // Create Customer
-      const [customer] = await Customer.create([
+      // ================================
+      // ✅ 8. CREATE CUSTOMER
+      // ================================
+      const customer = await Customer.create([
         {
-          ...data,
           customerId,
+          companyName: data.companyName.trim(),
+          customerName: data.customerName.trim(),
           customerType: data.customerType,
+          transitDays: data.transitDays,
           gstNumber: data.gstNumber.toUpperCase(),
           adminEmail: data.adminEmail.toLowerCase(),
+          mobileNumber: data.mobileNumber,
+          position: data.position,
+          department: data.department,
           adminPassword: hashedPassword,
+          shippingAddress1: data.shippingAddress1,
+          shippingAddress2: data.shippingAddress2,
+          billingAddress: data.billingAddress,
+          geoLocation: data.geoLocation,
           url,
+          owner: false,
           createdBy: loggedInUser.userName,
         },
       ]);
 
-      // Build permissions safely
+      // ================================
+      // ✅ 9. BUILD PERMISSIONS
+      // ================================
       const userPermissions = buildPermissionsFromRequest(data.permissions);
 
-      // Create Admin User
+      // ================================
+      // ✅ 10. CREATE ADMIN USER
+      // ================================
       await User.create([
         {
           userId,
-          userName: data.customerName,
+          userName: data.customerName.trim(),
           loginEmail: data.adminEmail.toLowerCase(),
           loginPassword: hashedPassword,
+          mobile: data.mobileNumber[0], // ✅ 0th index
+          position: data.position,
+          department: data.department,
           userTypeId: role._id,
-          customerId: customer._id,
-          companyName: data.companyName,
+          customerId: customer[0]._id,
+          companyName: data.companyName.trim(),
           url,
           permissions: userPermissions,
+          isMainAdmin: true,
           createdBy: loggedInUser.userName,
         },
       ]);
-
-      // Send Email (Do not break main flow if email fails)
+      const loginLink = PROCESS.ENV.FRONTEDN_URL;
+      // ================================
+      // ✅ 12. SEND EMAIL (Optional)
+      // ================================
       try {
         await sendMail({
           to: data.adminEmail,
@@ -179,6 +260,7 @@ export class CustomerMasterService {
           html: `
           <h2>Welcome to SmartBin</h2>
           <p>Your company <b>${data.companyName}</b> has been successfully registered.</p>
+          <p>Login Link : <b>${loginLink}
           <p><b>Login Email:</b> ${data.adminEmail}</p>
           <p><b>Password:</b> ${plainPassword}</p>
           <p>Please login and change your password immediately.</p>
@@ -188,7 +270,6 @@ export class CustomerMasterService {
         console.error("Email sending failed:", mailError.message);
       }
 
-      // Return Success
       return {
         success: true,
         statusCode: StatusCodes.CREATED,
@@ -197,6 +278,7 @@ export class CustomerMasterService {
           companyName: data.companyName,
           adminEmail: data.adminEmail,
           customerType: customerType.name,
+          message: "Customer created successfully",
         },
       };
     } catch (error) {
@@ -207,13 +289,31 @@ export class CustomerMasterService {
       };
     }
   }
+
   async get(id, query, loggedInUser) {
     try {
+      // ==========================================
+      // ✅ 1. OWNER CHECK
+      // ==========================================
+      if (!loggedInUser?.owner) {
+        return {
+          success: false,
+          statusCode: StatusCodes.FORBIDDEN,
+          data: { message: "Only owner users can access customers" },
+        };
+      }
+
+      // ==========================================
+      // ✅ 2. BASE FILTER
+      // ==========================================
       const baseFilter = {
         status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
+        owner: false,
       };
 
-      // CASE 1: Get By ID
+      // ==========================================
+      // 🔹 CASE 1: GET BY ID
+      // ==========================================
       if (id) {
         if (!mongoose.Types.ObjectId.isValid(id)) {
           return {
@@ -223,6 +323,9 @@ export class CustomerMasterService {
           };
         }
 
+        // ------------------------------------------
+        // Fetch Customer
+        // ------------------------------------------
         const customer = await Customer.findOne(
           { ...baseFilter, _id: id },
           { adminPassword: 0 },
@@ -238,14 +341,74 @@ export class CustomerMasterService {
           };
         }
 
+        // ------------------------------------------
+        // Fetch Main Admin (NO strict status filter)
+        // ------------------------------------------
+        const mainAdmin = await User.findOne(
+          {
+            customerId: customer._id,
+            isMainAdmin: true,
+          },
+          {
+            loginPassword: 0,
+            refreshToken: 0,
+            otp: 0,
+            otpExpiry: 0,
+            resetOtp: 0,
+            resetOtpExpiry: 0,
+            __v: 0,
+          },
+        ).lean();
+
+        // ------------------------------------------
+        // If no main admin found, try fallback
+        // (prevents null due to bad data)
+        // ------------------------------------------
+        let adminData = null;
+
+        if (mainAdmin) {
+          adminData = {
+            userId: mainAdmin.userId,
+            loginEmail: mainAdmin.loginEmail,
+            mobile: mainAdmin.mobile,
+            position: mainAdmin.position,
+            department: mainAdmin.department,
+            permissions: mainAdmin.permissions || [],
+            status: mainAdmin.status,
+          };
+        } else {
+          // Fallback: get first user of that customer
+          const fallbackUser = await User.findOne(
+            { customerId: customer._id },
+            { loginPassword: 0 },
+          ).lean();
+
+          if (fallbackUser) {
+            adminData = {
+              userId: fallbackUser.userId,
+              loginEmail: fallbackUser.loginEmail,
+              mobile: fallbackUser.mobile,
+              position: fallbackUser.position,
+              department: fallbackUser.department,
+              permissions: fallbackUser.permissions || [],
+              status: fallbackUser.status,
+            };
+          }
+        }
+
         return {
           success: true,
           statusCode: StatusCodes.OK,
-          data: customer,
+          data: {
+            ...customer,
+            superAdmin: adminData,
+          },
         };
       }
 
-      // CASE 2: Paginated Get All
+      // ==========================================
+      // 🔹 CASE 2: PAGINATED GET ALL
+      // ==========================================
       let { page = 1, limit = 10 } = query;
 
       page = parseInt(page);
@@ -292,33 +455,99 @@ export class CustomerMasterService {
     }
   }
 
-  async update(id, data, loggedInUser) {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return {
-        success: false,
-        data: { message: "Invalid customer ID" },
-        statusCode: 400,
-      };
-    }
-
-    if (!data || Object.keys(data).length === 0) {
-      return {
-        success: false,
-        data: { message: "No fields provided for update" },
-        statusCode: 400,
-      };
-    }
-
+  async getAll(loggedInUser) {
     try {
-      const customer = await Customer.findOne({
-        _id: id,
+      // Base filter for active/inactive customers
+      const filter = {
         status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
-      });
+      };
+
+      // Only filter by _id if the user is NOT an owner
+      if (!loggedInUser.owner) {
+        const customerObj = loggedInUser.customerId;
+
+        if (!customerObj || !customerObj._id) {
+          return {
+            success: false,
+            statusCode: 400,
+            data: { message: "Customer ID missing in login token" },
+          };
+        }
+
+        // Ensure it’s a valid ObjectId string
+        if (!mongoose.Types.ObjectId.isValid(customerObj._id)) {
+          return {
+            success: false,
+            statusCode: 400,
+            data: { message: "Invalid customer ID in token" },
+          };
+        }
+
+        filter._id = new mongoose.Types.ObjectId(customerObj._id);
+      }
+
+      const customers = await Customer.find(filter, { adminPassword: 0 })
+        .populate("customerType", "customerTypeName")
+        .lean();
+
+      return {
+        success: true,
+        statusCode: 200,
+        data: loggedInUser.owner ? customers : customers[0] || null,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: 500,
+        data: { message: error.message },
+      };
+    }
+  }
+
+  async update(id, data, loggedInUser) {
+    try {
+      // ==========================================
+      // ✅ 1. OWNER CHECK
+      // ==========================================
+      if (!loggedInUser?.owner) {
+        return {
+          success: false,
+          data: { message: "Only owner users can update customers" },
+          statusCode: 403,
+        };
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return {
+          success: false,
+          data: { message: "Invalid customer ID" },
+          statusCode: 400,
+        };
+      }
+
+      if (!data || Object.keys(data).length === 0) {
+        return {
+          success: false,
+          data: { message: "No fields provided for update" },
+          statusCode: 400,
+        };
+      }
+
+      // ==========================================
+      // ✅ 2. FETCH CUSTOMER
+      // ==========================================
+      const customer = await Customer.findOne(
+        {
+          _id: id,
+          status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
+        },
+        null,
+      );
 
       if (!customer) {
         return {
           success: false,
-          data: { message: "Customer not found or inactive" },
+          data: { message: "Customer not found" },
           statusCode: 404,
         };
       }
@@ -327,16 +556,18 @@ export class CustomerMasterService {
         updatedBy: loggedInUser.userName,
       };
 
-      /* ---------------- PERMISSIONS UPDATE ---------------- */
+      // =========================================================
+      // 🔐 PERMISSIONS UPDATE (Main Admin Only)
+      // =========================================================
       if (data.permissions && Array.isArray(data.permissions)) {
         const normalizedPermissions = buildPermissionsFromRequest(
           data.permissions,
         );
 
-        await User.updateMany(
+        await User.updateOne(
           {
             customerId: customer._id,
-            userTypeId: loggedInUser.userTypeId, // adjust if needed
+            isMainAdmin: true,
           },
           {
             permissions: normalizedPermissions,
@@ -345,35 +576,34 @@ export class CustomerMasterService {
         );
       }
 
-      /* ---------------- CUSTOMER TYPE UPDATE ---------------- */
+      // =========================================================
+      // 🏷 CUSTOMER TYPE UPDATE
+      // =========================================================
       if (data.customerType) {
         if (!mongoose.Types.ObjectId.isValid(data.customerType)) {
-          return {
-            success: false,
-            data: { message: "Invalid customer type id" },
-            statusCode: 400,
-          };
+          throw new Error("Invalid customer type id");
         }
 
-        const customerType = await CustomerType.findOne({
-          _id: data.customerType,
-          status: STATUS.ACTIVE,
-        });
+        const customerType = await CustomerType.findOne(
+          {
+            _id: data.customerType,
+            status: STATUS.ACTIVE,
+          },
+          null,
+        );
 
         if (!customerType) {
-          return {
-            success: false,
-            data: { message: "Customer type not found or inactive" },
-            statusCode: 404,
-          };
+          throw new Error("Customer type not found or inactive");
         }
 
         updateData.customerType = data.customerType;
       }
 
-      /* ---------------- GST UPDATE ---------------- */
+      // =========================================================
+      // 🧾 GST UPDATE
+      // =========================================================
       if (data.gstNumber) {
-        const newGST = data.gstNumber.toUpperCase();
+        const newGST = data.gstNumber.toUpperCase().trim();
 
         const gstExists = await Customer.exists({
           gstNumber: newGST,
@@ -381,18 +611,14 @@ export class CustomerMasterService {
           status: STATUS.ACTIVE,
         });
 
-        if (gstExists) {
-          return {
-            success: false,
-            data: { message: "GST already exists" },
-            statusCode: 409,
-          };
-        }
+        if (gstExists) throw new Error("GST already exists");
 
         updateData.gstNumber = newGST;
       }
 
-      /* ---------------- COMPANY NAME UPDATE ---------------- */
+      // =========================================================
+      // 🏢 COMPANY NAME UPDATE (Sync User Table)
+      // =========================================================
       if (data.companyName) {
         const newCompany = data.companyName.trim();
 
@@ -402,13 +628,7 @@ export class CustomerMasterService {
           status: STATUS.ACTIVE,
         });
 
-        if (companyExists) {
-          return {
-            success: false,
-            data: { message: "Company name already exists" },
-            statusCode: 409,
-          };
-        }
+        if (companyExists) throw new Error("Company name already exists");
 
         const newUrl = newCompany.toLowerCase().replace(/\s+/g, "-");
 
@@ -425,8 +645,71 @@ export class CustomerMasterService {
         );
       }
 
-      /* ---------------- OTHER FIELDS ---------------- */
-      const allowed = [
+      // =========================================================
+      // 📱 MOBILE NUMBER UPDATE (Sync Main Admin)
+      // =========================================================
+      if (data.mobileNumber) {
+        if (
+          !Array.isArray(data.mobileNumber) ||
+          data.mobileNumber.length === 0
+        ) {
+          throw new Error("Mobile number must be a non-empty array");
+        }
+
+        updateData.mobileNumber = data.mobileNumber;
+
+        await User.updateOne(
+          {
+            customerId: customer._id,
+            isMainAdmin: true,
+          },
+          {
+            mobile: data.mobileNumber[0], // 0th index sync
+            updatedBy: loggedInUser.userName,
+          },
+        );
+      }
+
+      // =========================================================
+      // 👔 POSITION UPDATE (Sync Main Admin)
+      // =========================================================
+      if (data.position !== undefined) {
+        updateData.position = data.position;
+
+        await User.updateOne(
+          {
+            customerId: customer._id,
+            isMainAdmin: true,
+          },
+          {
+            position: data.position,
+            updatedBy: loggedInUser.userName,
+          },
+        );
+      }
+
+      // =========================================================
+      // 🏢 DEPARTMENT UPDATE (Sync Main Admin)
+      // =========================================================
+      if (data.department !== undefined) {
+        updateData.department = data.department;
+
+        await User.updateOne(
+          {
+            customerId: customer._id,
+            isMainAdmin: true,
+          },
+          {
+            department: data.department,
+            updatedBy: loggedInUser.userName,
+          },
+        );
+      }
+
+      // =========================================================
+      // 🧩 OTHER SAFE FIELDS
+      // =========================================================
+      const allowedFields = [
         "customerName",
         "transitDays",
         "shippingAddress1",
@@ -436,17 +719,20 @@ export class CustomerMasterService {
         "status",
       ];
 
-      for (let key of allowed) {
+      for (let key of allowedFields) {
         if (data[key] !== undefined) {
           updateData[key] = data[key];
         }
       }
 
+      // =========================================================
+      // ✅ FINAL UPDATE
+      // =========================================================
       const updatedCustomer = await Customer.findOneAndUpdate(
         { _id: id },
         updateData,
         {
-          new: true,
+          returnDocument: "after",
           projection: { adminPassword: 0 },
         },
       );
@@ -459,24 +745,55 @@ export class CustomerMasterService {
           companyName: updatedCustomer.companyName,
           gstNumber: updatedCustomer.gstNumber,
           adminEmail: updatedCustomer.adminEmail,
+          message: "Customer updated successfully",
         },
       };
     } catch (error) {
       return {
         success: false,
         data: { message: error.message },
-        statusCode: 500,
+        statusCode: 400,
       };
     }
   }
+
   async delete(id, loggedInUser) {
     try {
+      // ==========================================
+      // ✅ 1. OWNER CHECK
+      // ==========================================
+      if (!loggedInUser?.owner) {
+        return {
+          success: false,
+          data: { message: "Only owner users can delete customers" },
+          statusCode: StatusCodes.FORBIDDEN,
+        };
+      }
+
+      // ==========================================
+      // ✅ 2. VALIDATE ID
+      // ==========================================
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return {
+          success: false,
+          data: { message: "Invalid customer ID" },
+          statusCode: StatusCodes.BAD_REQUEST,
+        };
+      }
+
+      // ==========================================
+      // ✅ 3. OWNER-SAFE SOFT DELETE
+      // ==========================================
       const customer = await Customer.findOneAndUpdate(
-        { _id: id, status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] } },
+        {
+          _id: id,
+          status: { $in: [STATUS.ACTIVE, STATUS.INACTIVE] },
+        },
         {
           status: STATUS.DELETED,
           updatedBy: loggedInUser.userName,
         },
+        { new: true },
       );
 
       if (!customer) {
@@ -487,7 +804,16 @@ export class CustomerMasterService {
         };
       }
 
-      await User.updateMany({ customerId: id }, { status: STATUS.DELETED });
+      // ==========================================
+      // ✅ 4. SOFT DELETE RELATED USERS
+      // ==========================================
+      await User.updateMany(
+        { customerId: id },
+        {
+          status: STATUS.DELETED,
+          updatedBy: loggedInUser.userName,
+        },
+      );
 
       return {
         success: true,
@@ -516,8 +842,9 @@ export class CustomerMasterService {
         };
       }
 
-      const user = await User.findOne({ loginEmail }).populate("userTypeId");
-
+      const user = await User.findOne({ loginEmail })
+        .populate("userTypeId")
+        .populate("customerId");
       if (!user) {
         return {
           success: false,
@@ -548,11 +875,10 @@ export class CustomerMasterService {
       const tokens = getJwtToken({
         _id: user._id,
         role: user.userTypeId.userTypeName,
-        company: user.companyName,
         customerId: user.customerId,
-        userName: user.userName,
         url: user.url,
         userTypeId: user.userTypeId,
+        isOwner: user.customerId.owner,
       });
 
       // Store hashed refresh token

@@ -61,6 +61,10 @@ const userSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    department: {
+      type: String,
+      trim: true,
+    },
 
     position: {
       type: String,

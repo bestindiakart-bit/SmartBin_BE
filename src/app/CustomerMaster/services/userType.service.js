@@ -129,7 +129,9 @@ export class userTypeService {
       };
     }
   }
+
   async update(id, data, loggedInUser) {
+
     try {
       const updateData = {
         updatedBy: loggedInUser.userName,
@@ -147,7 +149,7 @@ export class userTypeService {
         { _id: id, status: STATUS.ACTIVE },
         updateData,
         {
-          new: true,
+          returnDocument: "after",
           select: "userTypeName permissions",
         },
       ).lean();
@@ -173,6 +175,7 @@ export class userTypeService {
       };
     }
   }
+
   async delete(id, loggedInUser) {
     try {
       const inUse = await User.exists({

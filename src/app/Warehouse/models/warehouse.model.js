@@ -11,12 +11,7 @@ const warehouseSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     required: true,
     index: true,
-  },
-
-  customerName: {
-    type: String,
-    required: true,
-    trim: true,
+    ref: "Customer",
   },
 
   warehouseId: {
@@ -63,6 +58,24 @@ const warehouseSchema = new mongoose.Schema({
         type: Number,
         required: true,
         min: 0,
+      },
+
+      currentStock: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+
+      supplerName: {
+        type: String,
+      },
+
+      lastTransationQuantity: {
+        type: Number,
+      },
+
+      lastTransactionDate: {
+        type: Date,
       },
     },
   ],

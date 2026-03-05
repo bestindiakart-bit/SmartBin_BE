@@ -36,6 +36,13 @@ userMasterRouter
     authorize("user_master", "delete"),
     userMasterController.delete,
   );
+  userMasterRouter
+    .route("/by-customer/:customerId")
+    .get(
+      authenticate(),
+      authorize("user_master", "view"),
+      userMasterController.getByCustomer,
+    );
 
 userMasterRouter.route("/login").post(userMasterController.login);
 
