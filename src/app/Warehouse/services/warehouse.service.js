@@ -268,7 +268,7 @@ export class WarehouseService {
   async update(id, data, loggedInUser) {
     try {
       /* -------- 0. Owner check -------- */
-      if (!loggedInUser.owner) {
+      if (!loggedInUser?.owner) {
         return {
           success: false,
           data: { message: "Only owner users can update a warehouse" },
@@ -299,7 +299,7 @@ export class WarehouseService {
         };
       }
 
-      /* -------- 3. Update Customer (NEW) -------- */
+      /* -------- 3. Update Customer -------- */
       if (data.customerId !== undefined) {
         if (!mongoose.Types.ObjectId.isValid(data.customerId)) {
           return {
@@ -321,7 +321,6 @@ export class WarehouseService {
           };
         }
 
-        // Prevent duplicate warehouse for same customer
         const duplicate = await Warehouse.findOne({
           _id: { $ne: warehouse._id },
           customerId: data.customerId,
@@ -352,6 +351,7 @@ export class WarehouseService {
             statusCode: 400,
           };
         }
+
         warehouse.warehouseName = data.warehouseName.trim();
       }
 
@@ -368,6 +368,7 @@ export class WarehouseService {
         const itemIds = [];
 
         for (const item of data.items) {
+          /* ---- itemMasterId required ---- */
           if (!item.itemMasterId) {
             return {
               success: false,
@@ -376,22 +377,29 @@ export class WarehouseService {
             };
           }
 
+          /* ---- Required fields validation ---- */
           if (
             item.warehouseLimit == null ||
             item.warehouseReorderLevel == null ||
-            item.warehouseSafeStock == null
+            item.warehouseSafeStock == null ||
+            item.currentStock == null
           ) {
             return {
               success: false,
               data: {
                 message:
-                  "warehouseLimit, warehouseReorderLevel and warehouseSafeStock are required",
+                  "warehouseLimit, warehouseReorderLevel, warehouseSafeStock and currentStock are required",
               },
               statusCode: 400,
             };
           }
 
-          if (item.warehouseLimit < 0 || item.warehouseSafeStock < 0) {
+          /* ---- Negative value validation ---- */
+          if (
+            item.warehouseLimit < 0 ||
+            item.warehouseSafeStock < 0 ||
+            item.currentStock < 0
+          ) {
             return {
               success: false,
               data: { message: "Stock values cannot be negative" },
@@ -399,6 +407,7 @@ export class WarehouseService {
             };
           }
 
+          /* ---- Duplicate item check ---- */
           if (itemIds.includes(item.itemMasterId.toString())) {
             return {
               success: false,
@@ -409,6 +418,7 @@ export class WarehouseService {
 
           itemIds.push(item.itemMasterId.toString());
 
+          /* ---- Validate item exists ---- */
           const exists = await ItemMaster.exists({
             _id: item.itemMasterId,
           });
@@ -421,27 +431,34 @@ export class WarehouseService {
             };
           }
 
+          /* ---- Find existing item ---- */
           const existingItem = warehouse.items.find(
             (i) => i.itemMasterId.toString() === item.itemMasterId.toString(),
           );
 
           if (existingItem) {
+            /* ---- Update existing item ---- */
+            existingItem.currentStock = Number(item.currentStock);
             existingItem.warehouseLimit = Number(item.warehouseLimit);
             existingItem.warehouseReorderLevel = Number(
               item.warehouseReorderLevel,
             );
             existingItem.warehouseSafeStock = Number(item.warehouseSafeStock);
             existingItem.supplerName = item.supplerName?.trim();
+
             existingItem.lastTransationQuantity =
               item.lastTransationQuantity != null
                 ? Number(item.lastTransationQuantity)
                 : null;
+
             existingItem.lastTransactionDate = item.lastTransactionDate
               ? new Date(item.lastTransactionDate)
               : null;
           } else {
+            /* ---- Add new item ---- */
             warehouse.items.push({
               itemMasterId: item.itemMasterId,
+              currentStock: Number(item.currentStock),
               warehouseLimit: Number(item.warehouseLimit),
               warehouseReorderLevel: Number(item.warehouseReorderLevel),
               warehouseSafeStock: Number(item.warehouseSafeStock),
@@ -641,7 +658,7 @@ export class WarehouseService {
     }
   }
 
-  async warehouseTransactionByItem(query, loggedInUser) {    
+  async warehouseTransactionByItem(query, loggedInUser) {
     try {
       const { itemMasterId, customerId } = query;
 

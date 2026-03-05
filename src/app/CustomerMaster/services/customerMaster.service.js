@@ -15,7 +15,6 @@ import { config } from "dotenv";
 
 config();
 
-
 export class CustomerMasterService {
   generateSlug(name) {
     return name.trim().toLowerCase().replace(/\s+/g, "-");
@@ -249,8 +248,7 @@ export class CustomerMasterService {
           createdBy: loggedInUser.userName,
         },
       ]);
-      const loginLink = PROCESS.ENV.FRONTEDN_URL;
-      // ================================
+      const loginLink = process.env.FRONTEND_URL; // ================================
       // ✅ 12. SEND EMAIL (Optional)
       // ================================
       try {
