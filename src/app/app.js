@@ -45,6 +45,7 @@ export function init(app) {
   app.set("trust proxy", 1);
 
   app.get("/", (req, res) => {
+    console.log("Root endpoint hit");
     return res.json({ data: SuccessConstants.HELLO_WORLD });
   });
 
@@ -61,9 +62,8 @@ export function init(app) {
   app.use(`${BASE_URL}/customer-type`, customerTypeRouter);
   app.use(`${BASE_URL}/export`, exportRouter);
   app.use(`${BASE_URL}/bin-dashboard`, binDashboardRouter);
-  app.use(`${BASE_URL}/order`,orderRouter );
-  app.use(`${BASE_URL}/bom`,bomRouter)
-
+  app.use(`${BASE_URL}/order`, orderRouter);
+  app.use(`${BASE_URL}/bom`, bomRouter);
 
   // Static files
   app.use("/storage", express.static(path.join(__dirname, "storage")));
@@ -79,12 +79,6 @@ export function init(app) {
           "API is working correctly! Latest update on 25/02/2026 at 03:27 PM by Abdur Rahim",
       });
     }
-
-    app.use((req, res) => {
-      res
-        .status(404)
-        .json({ errors: "The resource you are looking for is not found" });
-    });
 
     return res
       .status(StatusCodes.NOT_FOUND)
